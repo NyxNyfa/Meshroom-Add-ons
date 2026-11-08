@@ -1,0 +1,52 @@
+[
+    {
+        "key": "GENSFM_REPO_PATH",
+        "type": "string",
+        "value": "D:/Meshroom/GenSfm"
+    },
+    {
+        "key": "GENSFM_CLOUD_URL",
+        "type": "string",
+        "value": "http://127.0.0.1:8000"
+    },
+    {
+        "key": "GENSFM_DEFAULT_ENDPOINT",
+        "type": "string",
+        "value": "http://127.0.0.1:8000"
+    },
+    {
+        "key": "GENSFM_WSL_DISTRO",
+        "type": "string",
+        "value": "Ubuntu"
+    },
+    {
+        "key": "GENSFM_WSL_CONDA_ENV",
+        "type": "string",
+        "value": "gensfm"
+    },
+    {
+        "key": "ATTN_BACKEND",
+        "type": "string",
+        "value": "sdpa"
+    },
+    {
+        "key": "ATTN_BACKEND_WITH_ATTN_BIAS",
+        "type": "string",
+        "value": "sdpa"
+    },
+    {
+        "key": "SPCONV_ALGO",
+        "type": "string",
+        "value": "native"
+    },
+    {
+        "key": "PYTORCH_CUDA_ALLOC_CONF",
+        "type": "string",
+        "value": "expandable_segments:True"
+    },
+    {
+        "key": "GENSFM_DEFAULT_TEMPLATE",
+        "type": "string",
+        "value": "genSfmHybrid"
+    }
+]
