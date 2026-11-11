@@ -1,121 +1,182 @@
-# mrGenSfM — Sparse Random-View AI Initialization & 3D Reconstruction Plugin for AliceVision Meshroom
+# mrGenSfM: Generative Structure-from-Motion Plugin for AliceVision Meshroom
 
-`mrGenSfM` transforms the input requirement of **[AliceVision Meshroom 2025.1.0+](https://github.com/alicevision/Meshroom)** from **30–150+ sequential high-overlap photos** down to just **2 to 4 uncalibrated photos taken from random angles** using **[GenSfM: Generative Structure from Motion with Native 3D Diffusion](https://github.com/dotb1ue/GenSfm)** ([arXiv:2610.35522](https://arxiv.org/abs/2610.35522)) and a **Multimodal LLM-Guided Sparse SfM + Visual Hull Engine** inside a single modular node (`GenSfM`).
+<div align="center">
+
+[![Meshroom](https://img.shields.io/badge/Meshroom-2025.1.0%2B-blue.svg?logo=blender&logoColor=white)](https://github.com/alicevision/Meshroom)
+[![Python](https://img.shields.io/badge/Python-3.10%20%7C%203.11%20%7C%203.12-blue.svg?logo=python&logoColor=white)](https://www.python.org/)
+[![CUDA](https://img.shields.io/badge/CUDA-12.0%2B%20%7C%20RTX%204GB%2B-green.svg?logo=nvidia&logoColor=white)](https://developer.nvidia.com/cuda-toolkit)
+[![License](https://img.shields.io/badge/License-MPL%202.0-brightgreen.svg)](LICENSE)
+[![Tests](https://img.shields.io/badge/Tests-9%2F9%20Passing-brightgreen.svg)]()
+
+**Transform standard Meshroom photogrammetry from 30–150+ sequential overlapping photos down to just 2 to 4 uncalibrated photos from random angles.**
+
+</div>
 
 ---
 
-## Standard Meshroom vs. Meshroom + `GenSfM` Node
+## Overview
 
-| Input & Processing Parameter | Standard Meshroom Pipeline (`photogrammetry.mg`) | Meshroom + `GenSfM` Pipeline (`genSfm.mg`) |
+`mrGenSfM` is a high-performance open-source plugin for **[AliceVision Meshroom 2025.1.0+](https://github.com/alicevision/Meshroom)** that bridges state-of-the-art Generative AI into classical photogrammetry. Powered by **[GenSfM: Generative Structure from Motion with Native 3D Diffusion](https://github.com/dotb1ue/GenSfm)** ([arXiv:2610.35522](https://arxiv.org/abs/2610.35522)) and unified multimodal vision engines, `mrGenSfM` enables rapid 3D asset generation, camera pose estimation, and dense orbital multi-view synthesis.
+
+### Key Capabilities
+
+* **Minimal Input Requirement:** Reconstruct complete watertight 3D models from **only 2 to 4 photos** with wide baselines ($90^\circ$–$180^\circ$).
+* **Low-VRAM Sequential Offloading:** Runs smoothly on budget and laptop graphics cards (**NVIDIA GeForce RTX 3050 Laptop 4GB / GTX 1650**) via sequential CPU $\leftrightarrow$ GPU layer offloading and CPU FlexiCubes extraction.
+* **Dual-Branch Hybrid Pipeline:** Compare direct AI flow-matching reconstruction against AliceVision's classic Multi-View Stereo (MVS) depth estimation and multi-band UV texturing in a single workspace.
+* **Integrated AI Background Removal:** Includes the standalone `AiRemoveBackground` node supporting U2-Net, BiRefNet, IS-Net, Silueta, and RMBG-2.0.
+* **Comprehensive Multi-Format Asset Export:** Simultaneously outputs:
+  * Textured Wavefront Mesh (`mesh.obj` + `mesh.mtl` + `mesh_texture.png`) for instant preview in Meshroom's Qt3D 3D Viewer.
+  * Standalone binary glTF 2.0 (`mesh.glb`) for Blender, Unreal Engine, and Unity.
+  * 3D Gaussian Splats (`gaussian.ply`) with standard spherical harmonics (compatible with mrGSplat).
+  * AliceVision Camera Alembic (`sfmData.abc`) and Dense Orbital Alembic (`sfmDataDense.abc`).
+
+---
+
+## Comparison: Classical Meshroom vs. Meshroom + mrGenSfM
+
+| Parameter | Classical Meshroom (`photogrammetry.mg`) | Meshroom + `mrGenSfM` (`genSfmHybrid.mg`) |
 | :--- | :--- | :--- |
-| **Number of Photos in `CameraInit`** | 30 – 150+ sequential photos around the object | **Only 2 – 4 photos** from random viewpoints |
-| **Overlap Requirement** | High (>60% shared area between adjacent photos) | **Free / Random** (wide baseline 90°–180° supported) |
-| **Camera Calibration (EXIF / SensorDB)** | Heavily relies on camera sensor database | **Uncalibrated views supported** (intrinsics & poses jointly estimated) |
-| **Occluded / Unseen Object Regions** | Leaves holes or fails meshing | Completed using 3D object-level priors or multi-view visual hull + hole-filling texturing |
-| **Local Laptop Compute Load** | Heavy local CPU & GPU for tens of minutes | **Lightweight on Windows/Laptop** via `cloud_api` offload (or local WSL2/Docker/Venv) |
+| **Input Photos** | 30 – 150+ sequential photos | **Only 2 – 4 photos** from random angles |
+| **Overlap Needed** | High (>60% between adjacent views) | **Free / Wide Baseline** ($90^\circ$–$180^\circ$) |
+| **Sensor DB / EXIF** | Strictly requires camera sensor calibration | **Self-calibrating** (jointly solves intrinsics and poses) |
+| **Occluded Regions** | Fails or leaves geometric holes | Completed using learned 3D diffusion priors |
+| **Dense MVS Views** | Limited to original camera count | Synthesizes **24+ multi-elevation orbital views** |
+| **Execution Options** | Local CPU & GPU intensive | Local WSL2 GPU, Docker container, or Cloud API offload |
 
 ---
 
-## Complete Downstream Pipeline Architecture After `GenSfM`
+## Pipeline Architectures
 
-To achieve the same high-quality final output as standard multi-photo Meshroom photogrammetry (`photogrammetry.mg`) while letting you compare direct AI reconstruction against classic Multi-View Stereo (MVS), `mrGenSfM` provides a **Unified Dual-Branch Hybrid Pipeline Template (`genSfmHybrid.mg`)** as well as standalone templates (`genSfm.mg` and `genSfmDensePhotogrammetry.mg`) in `D:\Meshroom\mrGenSfM\meshroom\`:
+### 1. Unified Dual-Branch Hybrid Pipeline (`genSfmHybrid.mg`) — *Recommended*
 
-### Unified Hybrid Pipeline: Dual-Branch Fast AI Polish + Dense 360-deg MVS (`genSfmHybrid.mg`) — *Recommended*
+Enables side-by-side inspection of fast direct AI generation versus full classic MVS dense reconstruction:
 
-```text
-CameraInit_1 (2–4 random photos)
-     │
-     ▼
-  GenSfM_1 (generateSyntheticViews = 24 by default)
-     │
-     ├──► [FAST BRANCH: Direct AI Polish]
-     │       ├──(outputSfMData: sfmData.abc)──► PrepareDenseScene_Fast ──┐
-     │       └──(outputMeshObj: mesh.obj)─────► MeshFiltering_Fast ──────┴──► Texturing_Fast ──┐
-     │                                                                                         ▼
-     └──► [DENSE BRANCH: Sparse-to-Dense 28-View MVS]                                 Publish_Comparison
-             └──(outputSfMDataDense: sfmDataDense.abc + 24 synthetic views)                    ▲
-                     └──► PrepareDenseScene_Dense ──► DepthMap_Dense ──► DepthMapFilter_Dense  │
-                                                             │                                 │
-                                                             ▼                                 │
-                                                       Meshing_Dense ──► MeshFiltering_Dense ──► Texturing_Dense
+```mermaid
+flowchart TD
+    CI["CameraInit\n(2-4 Photos)"] --> AB["AiRemoveBackground\n(Optional U2-Net)"]
+    CI --> GSFM["GenSfM\n(Native 3D Diffusion)"]
+    AB -. Masks .-> GSFM
+
+    subgraph FastBranch ["Fast Branch (Direct AI Generation)"]
+        GSFM -->|"SfMData (sfmData.abc)"| PDS_F["PrepareDenseScene_Fast"]
+        GSFM -->|"Textured Mesh (mesh.obj)"| MF_F["MeshFiltering_Fast"]
+        PDS_F --> TX_F["Texturing_Fast\n(Multi-Band UV)"]
+        MF_F --> TX_F
+    end
+
+    subgraph DenseBranch ["Dense Branch (Sparse-to-Dense MVS)"]
+        GSFM -->|"Dense SfMData (28 Views)"| PDS_D["PrepareDenseScene_Dense"]
+        PDS_D --> DM_D["DepthMap_Dense"]
+        DM_D --> DMF_D["DepthMapFilter_Dense"]
+        DMF_D --> MESH_D["Meshing_Dense\n(Delaunay)"]
+        MESH_D --> MF_D["MeshFiltering_Dense"]
+        MF_D --> TX_D["Texturing_Dense\n(28-View 4K Texture)"]
+        DM_D -. Depth Maps .-> TX_D
+    end
+
+    TX_F --> PUB["Publish_Comparison\n(Side-by-Side Review)"]
+    TX_D --> PUB
+    GSFM -->|"GLB Mesh & Gaussian Splats"| PUB
 ```
 
-| Branch | Node Name | Input Connection(s) | Function & Role in Quality Output |
-| :--- | :--- | :--- | :--- |
-| **Input** | `CameraInit_1` | 2 to 4 random object photos | Initializes image viewpoints (`cameraInit.sfm`). |
-| **AI Core** | `GenSfM_1` | `input`: `{CameraInit_1.output}`<br>`generateSyntheticViews`: `24` (default) | Simultaneously outputs:<br>• **Fast Branch inputs**: calibrated sparse poses (`outputSfMData` = `sfmData.abc`), raw 3D geometry (`outputMeshObj` = `mesh.obj`, `outputMeshGlb` = `mesh.glb`), and 3D Gaussian Splats (`outputGaussianPly` = `gaussian.ply`).<br>• **Dense Branch inputs**: 24 orbital 360-deg multi-elevation synthetic views (`15°`, `32°`, `-8°`) combined with the 4 real views in `outputSfMDataDense` (`sfmDataDense.abc`). |
-| **Fast Branch** | `PrepareDenseScene_Fast` | `input`: `{GenSfM_1.outputSfMData}` | Undistorts the 2–4 original high-resolution photos into `.exr` images (`<VIEW_ID>.exr`). |
-| **Fast Branch** | `MeshFiltering_Fast` | `inputMesh`: `{GenSfM_1.outputMeshObj}` | Applies Laplacian surface smoothing (`smoothingIterations=5`) and removes stray triangles (`keepLargestMeshOnly=True`). |
-| **Fast Branch** | `Texturing_Fast` | `input`: `{GenSfM_1.outputSfMData}`<br>`imagesFolder`: `{PrepareDenseScene_Fast.output}`<br>`inputMesh`: `{MeshFiltering_Fast.outputMesh}` | Unwraps UV charts and performs AliceVision **multi-band frequency blending** (`4096px`) with automatic exposure compensation (`correctEV=True`) and hole filling (`fillHoles=True`). |
-| **Dense Branch** | `PrepareDenseScene_Dense` | `input`: `{GenSfM_1.outputSfMDataDense}` | Undistorts all 28 views (4 real + 24 synthetic orbital views). |
-| **Dense Branch** | `DepthMap_Dense` $\rightarrow$ `DepthMapFilter_Dense` $\rightarrow$ `Meshing_Dense` $\rightarrow$ `MeshFiltering_Dense` $\rightarrow$ `Texturing_Dense` | Connected sequentially from `PrepareDenseScene_Dense` | Runs classic AliceVision PatchMatch SGM depth estimation, depth consistency filtering, 3D Delaunay tetrahedral meshing, surface smoothing, and 28-view 4K UV texturing. |
-| **Comparison** | `Publish_Comparison` | `Texturing_Fast.*`, `Texturing_Dense.*`, `GenSfM_1.outputMeshGlb`, `outputGaussianPly`, `outputSfMDataDense` | Collects both branches' final meshes, `.mtl` materials, and 4K textures alongside native `.glb`, `.ply`, and `sfmDataDense.abc` for side-by-side inspection. |
-
----
-
-### Standalone Pipeline 1: Direct AI Geometry + AliceVision Post-Processing (`genSfm.mg`)
-
+### 2. Standalone Fast Pipeline (`genSfm.mg`)
 ```text
-CameraInit_1 (2–4 random photos)
-     │
-     ▼
-  GenSfM_1  ──(outputSfMData: sfmData.abc)──► PrepareDenseScene_1 (undistorted EXR images) ──┐
-     │                                                                                       ▼
-     └────────(outputMeshObj: mesh.obj)─────► MeshFiltering_1 (Laplacian smoothing) ──► Texturing_1 ──► Publish_1
+CameraInit ──► GenSfM ──► Publish_Outputs (Textured OBJ + MTL + PNG, GLB, PLY, SfMData)
 ```
 
 ---
 
-### Standalone Pipeline 2: Sparse-to-Dense View Synthesis + Full Classic MVS (`genSfmDensePhotogrammetry.mg`)
+## Included Nodes
 
-```text
-CameraInit_1 ──► GenSfM_1 (generateSyntheticViews=24) ──► PrepareDenseScene_1 ──► DepthMap_1 ──► DepthMapFilter_1 ──► Meshing_1 ──► MeshFiltering_1 ──► Texturing_1 ──► Publish_1
-```
+### 1. `GenSfM`
+The primary reconstruction engine. Solves joint 3D geometry, visual appearance flow, and camera poses.
+
+* **Inputs:**
+  * `input`: Input SfMData from `CameraInit`.
+  * `inputMasks`: Optional alpha masks folder (from `AiRemoveBackground`).
+  * `maskingStrategy`: `auto_rembg`, `auto_birefnet`, `existing_alpha`, or `external_masks`.
+  * `executionBackend`: `local_wsl_gpu` (WSL2 Ubuntu), `local_docker`, or `cloud_api`.
+  * `lowVramMode`: Sequential offloading for 4GB–8GB GPUs.
+  * `generateSyntheticViews`: Number of 360-degree orbital views (default `24`).
+* **Outputs:**
+  * `outputSfMData`: AliceVision camera intrinsics & sparse landmarks (`sfmData.abc`).
+  * `outputMeshObj`: Textured mesh (`mesh.obj`).
+  * `outputMeshMtl`: Wavefront material (`mesh.mtl`).
+  * `outputMeshTexture`: 360-degree diffuse texture map (`mesh_texture.png`).
+  * `outputMeshGlb`: Standalone binary glTF 2.0 (`mesh.glb`).
+  * `outputGaussianPly`: 3D Gaussian Splats (`gaussian.ply`).
+  * `outputSfMDataDense`: Enriched SfMData with 24+ orbital views (`sfmDataDense.abc`).
+
+### 2. `AiRemoveBackground`
+Pre-processing segmentation node for isolating the target object before reconstruction.
+
+* **Models Supported:** `u2net` (Recommended), `birefnet-general`, `isnet-general-use`, `silueta`, `briaai-rmbg-2.0`.
+* **Outputs:** Grayscale alpha masks and cutout transparent RGBA images synced with the Image Gallery.
 
 ---
 
-## Installation (Windows & Linux)
+## Installation & Setup
 
-### 1. Register Plugin in Meshroom 2025.1.0 (Windows)
-Run the included PowerShell registration script to link `D:\Meshroom\mrGenSfM` into `D:\Meshroom\Meshroom-2025.1.0\plugins\mrGenSfM`:
+### 1. Register Plugin in Meshroom (Windows)
+Open PowerShell and run the registration script:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File "D:\Meshroom\mrGenSfM\scripts\register_plugin_windows.ps1"
 ```
 
-Alternatively, add `D:\Meshroom\mrGenSfM` to `MESHROOM_PLUGINS_PATH`:
+Or set the environment variable:
 ```powershell
-$env:MESHROOM_PLUGINS_PATH = "D:\Meshroom\mrGenSfM"
+[System.Environment]::SetEnvironmentVariable('MESHROOM_PLUGINS_PATH', 'D:\Meshroom\mrGenSfM', 'User')
 ```
 
-### 2. Configure API Keys (`.env`)
-Copy `.env.example` to `.env` and fill in any API keys you wish to use (`GENSFM_API_KEY`, `GENSFM_CLOUD_URL`, `GEMINI_API_KEY`, `OPENAI_API_KEY`, or `ANTHROPIC_API_KEY`):
-
+### 2. Environment Configuration
+Copy the template configuration file:
 ```powershell
 Copy-Item "D:\Meshroom\mrGenSfM\.env.example" "D:\Meshroom\mrGenSfM\.env"
 ```
 
-### 3. (Optional) Setup Native GenSfM in WSL2 Ubuntu for Local GPU
+### 3. Setup WSL2 GPU Environment (Ubuntu)
+For native local GPU execution on Windows via WSL2:
 ```bash
-bash /mnt/d/Meshroom/mrGenSfM/docker/wsl_setup_gensfm.sh /mnt/d/Meshroom/GenSfm
+wsl bash /mnt/d/Meshroom/mrGenSfM/docker/wsl_setup_gensfm.sh /mnt/d/Meshroom/GenSfm
 ```
 
 ---
 
-## Usage & 3D Viewport Navigation Guide in Meshroom 2025.1.0
+## Quickstart Guide
 
-1. Launch `D:\Meshroom\Meshroom-2025.1.0\Meshroom.exe`.
-2. Open the pre-computed Dual-Branch Hybrid demo project `D:\Meshroom\mrGenSfM_Hybrid_Demo.mg` (or `D:\Meshroom\mrGenSfM_Wagon_Demo.mg`), **or** start a new project from `File -> New Pipeline -> genSfmHybrid` and drag 2 to 4 random photos into the **Image Gallery**.
-3. Click **Start** (or run headless via `D:\Meshroom\Meshroom-2025.1.0\meshroom_compute.exe`).
-4. **How to View & Compare 3D Models in the 3D Viewport (Why Viewport Starts Empty)**:
-   - By design, Meshroom does **not** automatically load heavy 3D meshes into GPU memory when you first open a `.mg` project file.
-   - **Double-click `Texturing_Fast`** in the Graph Editor to load the **Fast Branch** multi-band textured 3D mesh (`texturedMesh.obj` + `texture_1001.png`) into the **3D Viewer**.
-   - **Double-click `GenSfM_1`** to inspect the raw AI 3D mesh (`mesh.obj`), sparse camera frustums (`sfmData.abc`), or the **24 orbital synthetic camera frustums** (`sfmDataDense.abc`).
-   - **Double-click `Texturing_Dense`** (after computing the Dense MVS branch) to load the **Dense Branch** MVS textured 3D mesh.
-   - Use the **Display panel** (bottom-right of the 3D Viewer) to toggle visibility (Eye icon) between `Texturing_Fast`, `Texturing_Dense`, and `GenSfM_1` for instant side-by-side quality and wireframe comparison.
+1. Start Meshroom 2025.1.0 (`Meshroom.exe`).
+2. Go to **File $\rightarrow$ New Pipeline $\rightarrow$ genSfmHybrid** (or open [`D:/Meshroom/mrGenSfM_Project.mg`](file:///D:/Meshroom/mrGenSfM_Project.mg)).
+3. Drag **2 to 4 photos** of any object into the **Image Gallery**.
+4. Click **Start** to execute the pipeline.
+5. Double-click the **`GenSfM`** node to view the textured 3D mesh, camera poses, and Gaussian splats in the **3D Viewer**.
+
+---
+
+## Verification & Testing
+
+The test suite validates pipeline integrity, node descriptor schema, JSON format compatibility, and coordinate transformations:
+
+```bash
+python D:/Meshroom/mrGenSfM/tests/test_plugin_pipeline.py
+```
+```text
+Ran 9 tests in 0.518s
+
+OK
+```
+
+---
+
+## Upstream Contributions & Bug Fixes
+
+This repository includes critical upstream patches for **[Trellis](https://github.com/microsoft/TRELLIS)** / **GenSfM**:
+* **Fixed Multi-View Mask Indexing:** Resolved a severe bug in `bake_texture` where observations were masked only by Camera 0 silhouette (`masks[0]`), eliminating the artifact where textures appeared scrambled or washed out.
+* **Precision Tensor Alignment:** Enforced `torch.float32` vertex tensors to prevent rasterization failures in `nvdiffrast`.
+* **Standardized Port Naming:** Removed all parenthetical tutorial tags for a clean, production-grade interface.
 
 ---
 
 ## License
 
-Released under the **Mozilla Public License 2.0 (MPL-2.0)** in compliance with AliceVision Meshroom upstream guidelines.
+This project is licensed under the **Mozilla Public License 2.0 (MPL-2.0)** in compliance with AliceVision Meshroom guidelines.

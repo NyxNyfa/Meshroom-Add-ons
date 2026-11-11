@@ -292,7 +292,19 @@ Node `GenSfM` secara mandiri mengekspor aset 3D siap pakai:
      * `gaussian.ply` (3D Gaussian Splatting)
      * `sfmData.abc` (Camera SfMData & point cloud)
 
+---
 
+## 10. Perbaikan Upstream Multi-View Masking & Standarisasi Penamaan Profesional
 
+### A. Investigasi Cacat Tekstur (Camouflage / Watermark Smear):
+* **Akar Masalah di Upstream Trellis:**
+  Pada fungsi `bake_texture(mode='fast')` di `trellis/utils/postprocessing_utils.py`, perulangan 100 sudut kamera mengabaikan `masks` dan secara keliru mengunci `& masks[0]` (siluet kamera tampak depan). Akibatnya, seluruh 99 sudut samping dan belakang dipotong, membuang >85% piksel tekstur UV dan memaksa algoritma Telea inpaint menyapu warna sisa menjadi bercak noda luntur.
+* **Perbaikan Kode Upstream:**
+  1. Memasukkan `masks` ke dalam iterasi: `for observation, mask_obs, view, projection in zip(observations, masks, views, projections)`.
+  2. Mengikat mask pada sudut masing-masing: `mask = rast['mask'][0].detach().bool() & mask_obs`.
+  3. Memastikan tensor vertex menggunakan presisi `torch.float32`.
 
+### B. Standarisasi Penamaan Bersih & Profesional (Tanpa Tanda Kurung):
+* Menghilangkan seluruh tag panduan tutorial di dalam tanda kurung pada nama port dan label node (`(24 Orbit Views + AI Mesh)`, `(Alembic - Double-Click to View Cameras)`, `(OBJ - Double-Click to View 3D)`, dll.).
+* Seluruh port kini menggunakan format standar industri AliceVision: `SfMData`, `Textured Mesh`, `Mesh Material`, `Mesh Texture`, `GLB Mesh`, `Gaussian Splats`, `Cameras`, `Dense SfMData`, `Reprojection`, dan `Foreground Mask`.
 

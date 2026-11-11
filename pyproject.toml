@@ -38,13 +38,13 @@ include = ["meshroom*", "gensfm_core*", "scripts*"]
 
 [tool.meshroom.plugin]
 name = "mrGenSfM"
-version = "0.1.0"
+version = "1.0.0"
 publisher = "Meshroom Community"
-requirements = "Cloud API (Any OS/Laptop) or NVIDIA GPU with Docker/CUDA 12.8 for Local mode"
+requirements = "Cloud API (Any OS/Laptop) or NVIDIA GPU with WSL2/Docker/CUDA 12.0+ for Local mode"
 license = "MPL-2.0"
 category = "Sparse Reconstruction / AI"
-nodes = ["meshroom.genSfm.GenSfM"]
-templates = ["meshroom/genSfm.mg"]
+nodes = ["meshroom.genSfm.GenSfM", "meshroom.genSfm.AiRemoveBackground"]
+templates = ["meshroom/genSfm.mg", "meshroom/genSfmHybrid.mg", "meshroom/genSfmDensePhotogrammetry.mg"]
 
 [tool.meshroom.plugin.env]
 ATTN_BACKEND = "sdpa"
