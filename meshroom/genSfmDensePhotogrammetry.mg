@@ -86,8 +86,8 @@
             ],
             "inputs": {
                 "inputMesh": "{Meshing_1.outputMesh}",
-                "keepLargestMeshOnly": true,
-                "smoothingIterations": 5
+                "keepLargestMeshOnly": false,
+                "smoothingIterations": 1
             }
         },
         "Texturing_1": {

@@ -71,8 +71,8 @@
             ],
             "inputs": {
                 "inputMesh": "{GenSfM_1.outputMeshObj}",
-                "keepLargestMeshOnly": true,
-                "smoothingIterations": 5
+                "keepLargestMeshOnly": false,
+                "smoothingIterations": 1
             },
             "internalInputs": {
                 "invalidation": "",
@@ -181,8 +181,8 @@
             ],
             "inputs": {
                 "inputMesh": "{Meshing_Dense.outputMesh}",
-                "keepLargestMeshOnly": true,
-                "smoothingIterations": 5
+                "keepLargestMeshOnly": false,
+                "smoothingIterations": 1
             },
             "internalInputs": {
                 "invalidation": "",

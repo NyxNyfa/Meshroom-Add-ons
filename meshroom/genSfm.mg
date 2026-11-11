@@ -49,8 +49,8 @@
             ],
             "inputs": {
                 "inputMesh": "{GenSfM_1.outputMeshObj}",
-                "keepLargestMeshOnly": true,
-                "smoothingIterations": 5
+                "keepLargestMeshOnly": false,
+                "smoothingIterations": 1
             }
         },
         "Texturing_1": {

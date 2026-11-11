@@ -94,13 +94,12 @@ Standard Meshroom pipelines require 30–150+ sequential photos with >60% overla
         desc.ChoiceParam(
             name="executionBackend",
             label="Execution Backend",
-            description="Execution backend (changing backend does not invalidate cache):\n"
-                        " - cloud_api: Offload to Cloud AI API / Multimodal LLM API (lightweight on Windows laptops).\n"
-                        " - local_wsl_gpu: Execute on local NVIDIA GPU via Windows WSL2 Ubuntu bridge with Low-VRAM offloading.\n"
+            description="Hardware execution backend for GenSfM:\n"
+                        " - local_wsl_gpu: Execute natively on local NVIDIA GPU inside WSL2 Ubuntu (with Low-VRAM offloading).\n"
                         " - local_docker: Execute inside Linux CUDA 12.8 Docker container (WSL2 backend).\n"
-                        " - local_venv: Execute directly in local Python virtual environment (./venv).",
-            value="cloud_api",
-            values=["cloud_api", "local_wsl_gpu", "local_docker", "local_venv"],
+                        " - local_venv: Execute directly in local Python virtual environment.",
+            value="local_wsl_gpu",
+            values=["local_wsl_gpu", "local_docker", "local_venv", "cloud_api"],
             exclusive=True,
             invalidate=False,
         ),
@@ -108,23 +107,16 @@ Standard Meshroom pipelines require 30–150+ sequential photos with >60% overla
             name="engineType",
             label="Reconstruction Engine",
             description="Select the 3D reconstruction engine:\n"
-                        " - gensfm_diffusion: Native 3D Diffusion (dotb1ue/GenSfm) for joint 3D shape, appearance & pose.\n"
-                        " - llm_guided_sfm: Lightweight Multimodal LLM pose estimation (Gemini/GPT/Claude) + Multi-View Visual Hull.",
+                        " - gensfm_diffusion: Native 3D Diffusion (dotb1ue/GenSfm) for joint 3D shape, appearance & pose.",
             value="gensfm_diffusion",
             values=["gensfm_diffusion", "llm_guided_sfm"],
             exclusive=True,
+            advanced=True,
         ),
         desc.ChoiceParam(
             name="aiProvider",
-            label="AI / Cloud Provider",
-            description="AI API provider used when executionBackend='cloud_api' or engineType='llm_guided_sfm':\n"
-                        " - gemini: Google Gemini API (gemini-3.8-flash)\n"
-                        " - openai: OpenAI API (gpt-4o)\n"
-                        " - anthropic: Anthropic Claude API (claude-3-7-sonnet-latest)\n"
-                        " - custom_server: Self-hosted / Cloud GenSfM FastAPI worker (scripts/cloud_worker.py)\n"
-                        " - huggingface: Hugging Face Inference / Spaces endpoint\n"
-                        " - fal_ai: fal.ai Serverless 3D endpoint\n"
-                        " - replicate: Replicate Serverless 3D endpoint",
+            label="AI / Cloud Provider (Advanced)",
+            description="AI API provider (optional/advanced).",
             value="gemini",
             values=[
                 "gemini",
@@ -136,13 +128,15 @@ Standard Meshroom pipelines require 30–150+ sequential photos with >60% overla
                 "replicate",
             ],
             exclusive=True,
+            advanced=True,
             invalidate=False,
         ),
         desc.StringParam(
             name="aiModelName",
-            label="AI Model Name",
-            description="Model identifier for the selected AI provider (e.g. 'gemini-3.8-flash', 'gpt-4o', 'claude-3-7-sonnet-latest', or 'dotblue/GenSfm').",
+            label="AI Model Name (Advanced)",
+            description="Model identifier for legacy provider.",
             value="gemini-3.8-flash",
+            advanced=True,
             invalidate=False,
         ),
         desc.BoolParam(

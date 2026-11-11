@@ -392,6 +392,120 @@ def _segment_with_grabcut_or_border(rgb_uint8: np.ndarray) -> np.ndarray:
     return alpha
 
 
+def _is_rembg_available_locally() -> bool:
+    """Check if rembg is directly importable in the current Python environment."""
+    try:
+        import rembg  # noqa: F401
+        return True
+    except Exception:
+        return False
+
+
+def _run_ai_masking_wsl(
+    image_paths: Sequence[Path],
+    output_masks_dir: Path,
+    model_name: str = "u2net",
+    logger: Optional[logging.Logger] = None,
+) -> bool:
+    """
+    Execute AI foreground segmentation (rembg / U2-Net / BiRefNet) inside WSL2's Python environment.
+    Provides a seamless bridge when Meshroom runs on Windows without native ML packages.
+    """
+    import shutil
+
+    wsl_exe = shutil.which("wsl.exe") or shutil.which("wsl")
+    if not wsl_exe:
+        return False
+
+    try:
+        from gensfm_core.wsl_docker_bridge import windows_to_wsl_path
+    except ImportError:
+        return False
+
+    output_masks_dir = Path(output_masks_dir).resolve()
+    output_masks_dir.mkdir(parents=True, exist_ok=True)
+    wsl_out = windows_to_wsl_path(output_masks_dir)
+    wsl_imgs = [windows_to_wsl_path(p.resolve()) for p in image_paths]
+
+    py_code = f"""import sys
+from pathlib import Path
+from PIL import Image
+import numpy as np
+
+model_name = {json.dumps(model_name)}
+out_dir = Path({json.dumps(wsl_out)})
+img_paths = [{", ".join(json.dumps(p) for p in wsl_imgs)}]
+
+try:
+    import rembg
+    session = rembg.new_session(model_name)
+    for p_str in img_paths:
+        p = Path(p_str)
+        try:
+            im = Image.open(p)
+            out = rembg.remove(im, session=session).convert("RGBA")
+            stem = p.stem
+            alpha = out.getchannel("A")
+            alpha.save(out_dir / f"mask_{{stem}}.png")
+            out.save(out_dir / f"rgba_{{stem}}.png")
+        except Exception as err:
+            print(f"[WSL AI Masking] Error on {{p.name}}: {{err}}", file=sys.stderr)
+    print(f"[WSL AI Masking] Successfully segmented {{len(img_paths)}} images.")
+except Exception as e:
+    print(f"[WSL AI Masking] rembg execution failed: {{e}}", file=sys.stderr)
+    sys.exit(1)
+"""
+    runner_script = output_masks_dir / "_wsl_masking_runner.sh"
+    sh_content = f"""#!/usr/bin/env bash
+set -e
+for candidate in \\
+  "$HOME/miniforge3/envs/gensfm/bin/python3" \\
+  "$HOME/miniforge3/envs/gensfm/bin/python" \\
+  "$HOME/miniconda3/envs/gensfm/bin/python3" \\
+  "$HOME/mambaforge/envs/gensfm/bin/python3" \\
+  "/opt/conda/envs/gensfm/bin/python3"; do
+  if [ -x "$candidate" ]; then
+    PY_BIN="$candidate"
+    break
+  fi
+done
+
+if [ -z "$PY_BIN" ]; then
+  echo "[WSL AI Masking] No Python found in WSL conda env" >&2
+  exit 1
+fi
+
+"$PY_BIN" - << 'PYEOF'
+{py_code}
+PYEOF
+"""
+    runner_script.write_bytes(sh_content.replace("\r\n", "\n").encode("utf-8"))
+    wsl_runner = windows_to_wsl_path(runner_script)
+    distro = os.environ.get("GENSFM_WSL_DISTRO", "Ubuntu").strip() or "Ubuntu"
+
+    try:
+        if logger:
+            logger.info(f"Executing AI background removal in WSL2 ({distro}) using model '{model_name}'...")
+        proc = subprocess.run(
+            [wsl_exe, "-d", distro, "--", "bash", wsl_runner],
+            capture_output=True,
+            text=True,
+            timeout=180,
+        )
+        if proc.returncode == 0:
+            if logger:
+                logger.info("AI background removal in WSL2 completed successfully.")
+            return True
+        else:
+            if logger:
+                logger.warning(f"WSL AI masking returned non-zero ({proc.returncode}): {proc.stderr}")
+            return False
+    except Exception as exc:
+        if logger:
+            logger.warning(f"WSL AI masking execution failed ({exc}).")
+        return False
+
+
 def _apply_masking_to_image(
     image_rgba: Image.Image,
     view: ViewDescriptor,
@@ -408,21 +522,27 @@ def _apply_masking_to_image(
     if masking_mode == "existing_alpha" and has_existing_transparency:
         return Image.fromarray(rgba_np, mode="RGBA")
 
-    if masking_mode == "external_masks" and input_masks_folder and input_masks_folder.is_dir():
+    # Check external masks directory (or AI masks cache) for precomputed masks
+    if input_masks_folder and input_masks_folder.is_dir():
         candidates = [
+            input_masks_folder / f"rgba_{view.image_path.stem}.png",
+            input_masks_folder / f"mask_{view.image_path.stem}.png",
             input_masks_folder / f"{view.image_path.stem}.png",
             input_masks_folder / f"{view.image_path.stem}.exr",
+            input_masks_folder / f"mask_{view.view_id}.png",
+            input_masks_folder / f"rgba_{view.view_id}.png",
             input_masks_folder / f"{view.view_id}.png",
             input_masks_folder / f"{view.view_id}.exr",
-            input_masks_folder / f"mask_{view.view_id}.png",
         ]
         for cand in candidates:
             if cand.is_file() and cand.suffix.lower() in SUPPORTED_IMAGE_EXTENSIONS:
                 with Image.open(cand) as mask_im:
+                    if mask_im.mode == "RGBA" and cand.name.startswith("rgba_"):
+                        return mask_im.convert("RGBA").resize(image_rgba.size, Image.Resampling.BILINEAR)
                     mask_gray = mask_im.convert("L").resize(image_rgba.size, Image.Resampling.BILINEAR)
                     rgba_np[..., 3] = np.asarray(mask_gray, dtype=np.uint8)
                     return Image.fromarray(rgba_np, mode="RGBA")
-        if logger:
+        if masking_mode == "external_masks" and logger:
             logger.warning(f"No matching mask found in {input_masks_folder} for {view.image_path.name}, falling back.")
 
     if has_existing_transparency and masking_mode in ("auto_rembg", "auto_birefnet", "existing_alpha"):
@@ -445,7 +565,7 @@ def _apply_masking_to_image(
             return Image.fromarray(rgba_np, mode="RGBA")
         except Exception as exc:
             (logger or logging.getLogger(__name__)).info(
-                f"BiRefNet local matting unavailable ({exc}), falling back to GrabCut/rembg."
+                f"BiRefNet local matting unavailable ({exc}), falling back to rembg/GrabCut."
             )
 
     if masking_mode == "auto_rembg":
@@ -541,6 +661,18 @@ def prepare_masked_views(
     output_dir = Path(output_dir).resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
     masks_dir = Path(input_masks_folder).resolve() if input_masks_folder.strip() else None
+
+    # Automatic AI Masking Bridge:
+    # If no external mask folder is provided and AI background removal is requested,
+    # check if rembg is available locally. If not (e.g. running inside Windows Meshroom),
+    # automatically execute AI rembg (U2-Net / BiRefNet) inside WSL2's Python environment.
+    if masks_dir is None and masking_mode in ("auto_rembg", "auto_birefnet"):
+        if not _is_rembg_available_locally():
+            ai_cache_dir = output_dir / "ai_masks"
+            raw_paths = [v.image_path for v in views]
+            model_type = "birefnet-general" if masking_mode == "auto_birefnet" else "u2net"
+            if _run_ai_masking_wsl(raw_paths, ai_cache_dir, model_name=model_type, logger=logger):
+                masks_dir = ai_cache_dir
 
     prepared: List[PreparedViewRecord] = []
     for idx, view in enumerate(views):

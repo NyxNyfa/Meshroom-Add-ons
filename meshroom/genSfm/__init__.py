@@ -1,3 +1,4 @@
 """AliceVision Meshroom plugin package for mrGenSfM."""
 
-__all__ = ["GenSfM"]
+__all__ = ["GenSfM", "AiRemoveBackground"]
+

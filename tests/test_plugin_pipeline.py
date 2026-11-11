@@ -147,6 +147,19 @@ class TestMrGenSfMPipeline(unittest.TestCase):
             self.assertTrue(pv.gallery_mask_path.is_file())
             self.assertTrue((out_masks / "prepared_inputs" / f"{idx:02d}.png").is_file())
 
+        # Test AI rembg masking fallback / WSL bridge
+        out_ai = self.tmp_dir / "masked_ai"
+        prepared_ai = prepare_masked_views(
+            sel_uniform[:2],
+            output_dir=out_ai,
+            masking_mode="auto_rembg",
+            target_resolution=128,
+        )
+        self.assertEqual(len(prepared_ai), 2)
+        for pv in prepared_ai:
+            self.assertTrue(pv.rgba_path.is_file())
+            self.assertTrue(pv.rgb_cond_path.is_file())
+
     def test_glb_obj_and_gaussian_ply_roundtrip(self) -> None:
         verts = np.array(
             [

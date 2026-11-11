@@ -171,18 +171,8 @@ def run_gensfm_pipeline(
     rgba_paths = [pv.rgba_path for pv in prepared_views]
 
     # 3. Dispatch to selected Reconstruction Engine
-    api_key = resolve_api_key(config.ai_provider, config.cloud_api_key)
-    endpoint_url = resolve_endpoint_url(config.cloud_endpoint_url)
-    llm_providers = {"gemini", "openai", "anthropic"}
-    has_explicit_cloud_endpoint = bool(config.cloud_endpoint_url.strip())
-
-    use_llm_engine = config.engine_type == "llm_guided_sfm" or (
-        config.execution_mode == "cloud_api"
-        and config.ai_provider in llm_providers
-        and not has_explicit_cloud_endpoint
-    )
-
-    if use_llm_engine:
+    if config.engine_type == "llm_guided_sfm":
+        api_key = resolve_api_key(config.ai_provider, config.cloud_api_key)
         logger.info(
             f"Running LLM-Guided Sparse SfM + Visual Hull Engine (provider={config.ai_provider}, model={config.ai_model_name})..."
         )
@@ -196,75 +186,74 @@ def run_gensfm_pipeline(
             logger=logger,
         )
     else:
-        # Native GenSfM 3D Diffusion Engine (WSL2 GPU / Docker / Local Venv / 3D Cloud Server)
-        try:
-            if config.execution_mode == "local_wsl_gpu":
-                run_gensfm_via_wsl(
-                    image_paths=rgba_paths,
-                    output_dir=output_dir,
-                    pretrained_model=config.pretrained_model,
-                    stage1_checkpoint=config.stage1_checkpoint,
-                    stage2_checkpoint=config.stage2_checkpoint,
-                    seed=config.seed,
-                    steps=config.steps,
-                    low_vram_mode=config.low_vram_mode,
-                    remove_background=False,
-                    logger=logger,
-                )
-            elif config.execution_mode == "local_docker":
-                run_gensfm_via_docker(
-                    image_paths=rgba_paths,
-                    output_dir=output_dir,
-                    pretrained_model=config.pretrained_model,
-                    stage1_checkpoint=config.stage1_checkpoint,
-                    stage2_checkpoint=config.stage2_checkpoint,
-                    seed=config.seed,
-                    steps=config.steps,
-                    low_vram_mode=config.low_vram_mode,
-                    remove_background=False,
-                    logger=logger,
-                )
-            elif config.execution_mode == "local_venv":
-                run_gensfm_via_local_venv(
-                    image_paths=rgba_paths,
-                    output_dir=output_dir,
-                    pretrained_model=config.pretrained_model,
-                    stage1_checkpoint=config.stage1_checkpoint,
-                    stage2_checkpoint=config.stage2_checkpoint,
-                    seed=config.seed,
-                    steps=config.steps,
-                    low_vram_mode=config.low_vram_mode,
-                    remove_background=False,
-                    logger=logger,
-                )
-            elif config.execution_mode == "cloud_api":
-                run_gensfm_cloud_api(
-                    image_paths=rgba_paths,
-                    output_dir=output_dir,
-                    endpoint_url=endpoint_url,
-                    api_key=api_key,
-                    provider=config.ai_provider,
-                    model_name=config.pretrained_model,
-                    seed=config.seed,
-                    steps=config.steps,
-                    remove_background=(config.masking_mode == "auto_rembg"),
-                    timeout_sec=config.cloud_timeout_sec,
-                    logger=logger,
-                )
-            else:
-                raise ValueError(f"Unsupported executionMode: {config.execution_mode}")
-        except Exception as backend_exc:
-            logger.warning(
-                f"Native GenSfM backend '{config.execution_mode}' could not complete ({backend_exc}). "
-                "Automatically falling back to LLM-Guided Sparse SfM + Visual Hull Engine so pipeline succeeds."
-            )
-            run_llm_guided_sfm(
-                prepared_views=prepared_views,
+        # Native GenSfM 3D Diffusion Engine (WSL2 GPU / Docker / Local Venv)
+        if config.execution_mode == "local_wsl_gpu":
+            run_gensfm_via_wsl(
+                image_paths=rgba_paths,
                 output_dir=output_dir,
-                ai_provider=config.ai_provider,
-                ai_model_name=config.ai_model_name,
-                api_key=api_key,
+                pretrained_model=config.pretrained_model,
+                stage1_checkpoint=config.stage1_checkpoint,
+                stage2_checkpoint=config.stage2_checkpoint,
                 seed=config.seed,
+                steps=config.steps,
+                low_vram_mode=config.low_vram_mode,
+                remove_background=False,
+                logger=logger,
+            )
+        elif config.execution_mode == "local_docker":
+            run_gensfm_via_docker(
+                image_paths=rgba_paths,
+                output_dir=output_dir,
+                pretrained_model=config.pretrained_model,
+                stage1_checkpoint=config.stage1_checkpoint,
+                stage2_checkpoint=config.stage2_checkpoint,
+                seed=config.seed,
+                steps=config.steps,
+                low_vram_mode=config.low_vram_mode,
+                remove_background=False,
+                logger=logger,
+            )
+        elif config.execution_mode == "local_venv":
+            run_gensfm_via_local_venv(
+                image_paths=rgba_paths,
+                output_dir=output_dir,
+                pretrained_model=config.pretrained_model,
+                stage1_checkpoint=config.stage1_checkpoint,
+                stage2_checkpoint=config.stage2_checkpoint,
+                seed=config.seed,
+                steps=config.steps,
+                low_vram_mode=config.low_vram_mode,
+                remove_background=False,
+                logger=logger,
+            )
+        elif config.execution_mode == "cloud_api":
+            api_key = resolve_api_key(config.ai_provider, config.cloud_api_key)
+            endpoint_url = resolve_endpoint_url(config.cloud_endpoint_url)
+            run_gensfm_cloud_api(
+                image_paths=rgba_paths,
+                output_dir=output_dir,
+                endpoint_url=endpoint_url,
+                api_key=api_key,
+                provider=config.ai_provider,
+                model_name=config.pretrained_model,
+                seed=config.seed,
+                steps=config.steps,
+                remove_background=(config.masking_mode == "auto_rembg"),
+                timeout_sec=config.cloud_timeout_sec,
+                logger=logger,
+            )
+        else:
+            # Default to local_wsl_gpu
+            run_gensfm_via_wsl(
+                image_paths=rgba_paths,
+                output_dir=output_dir,
+                pretrained_model=config.pretrained_model,
+                stage1_checkpoint=config.stage1_checkpoint,
+                stage2_checkpoint=config.stage2_checkpoint,
+                seed=config.seed,
+                steps=config.steps,
+                low_vram_mode=config.low_vram_mode,
+                remove_background=False,
                 logger=logger,
             )
 

@@ -29,6 +29,7 @@ os.environ.setdefault("ATTN_BACKEND", "sdpa")
 os.environ.setdefault("ATTN_BACKEND_WITH_ATTN_BIAS", "sdpa")
 os.environ.setdefault("SPCONV_ALGO", "native")
 os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
+os.environ.setdefault("PYTORCH_ALLOC_CONF", "expandable_segments:True")
 
 
 def main() -> None:
@@ -56,6 +57,9 @@ def main() -> None:
     import example_multi_image as emi
     from trellis.pipelines.gensfm import GenSfMPipeline, InputViews
     from trellis import evaluators
+    import trellis.evaluators.base as eval_base
+    import trellis.representations.mesh.cube2mesh as c2m
+    import trellis.utils.postprocessing_utils as pu
 
     if not torch.cuda.is_available():
         raise RuntimeError("CUDA GPU is not available inside the execution environment.")
@@ -70,16 +74,17 @@ def main() -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
 
     if args.stage1 and args.stage2:
-        model_cfgs, options, crop_ratio = emi.inference_config(
+        all_cfgs, options, crop_ratio = emi.inference_config(
             args.stage1, args.stage2, len(paths), args.steps if args.steps is not None else 25
         )
     else:
-        pipeline = GenSfMPipeline.from_pretrained(args.pretrained).cuda()
-        if args.stage1:
-            pipeline.model_cfgs["denoiser"] = args.stage1
-        if args.stage2:
-            pipeline.model_cfgs["slat_denoiser"] = args.stage2
+        pipeline = GenSfMPipeline.from_pretrained(args.pretrained)
         if not args.low_vram:
+            pipeline = pipeline.cuda()
+            if args.stage1:
+                pipeline.model_cfgs["denoiser"] = args.stage1
+            if args.stage2:
+                pipeline.model_cfgs["slat_denoiser"] = args.stage2
             outputs = pipeline.run(
                 paths,
                 seed=args.seed,
@@ -94,7 +99,12 @@ def main() -> None:
                 output_dir,
             )
             return
-        model_cfgs = pipeline.model_cfgs
+
+        all_cfgs = dict(pipeline.model_cfgs)
+        if args.stage1:
+            all_cfgs["denoiser"] = args.stage1
+        if args.stage2:
+            all_cfgs["slat_denoiser"] = args.stage2
         options = dict(pipeline.inference)
         from trellis.pipelines.gensfm import NATIVE_INFERENCE_OPTIONS
         options.update(NATIVE_INFERENCE_OPTIONS)
@@ -102,59 +112,116 @@ def main() -> None:
             if args.steps is not None:
                 options[key]["params"]["steps"] = args.steps
         crop_ratio = pipeline.preprocessing["crop_size_ratio"]
+        del pipeline
+        gc.collect()
 
-    print("[mrGenSfM Low-VRAM] Initializing sequential CPU<->GPU stage offloading...", flush=True)
+    # Fast texture baking to prevent rasterization OOM on 4GB VRAM
+    orig_to_glb = pu.to_glb
+    def fast_to_glb(*g_args, **g_kwargs):
+        orig_bake = pu.bake_texture
+        pu.bake_texture = lambda *b_args, **b_kwargs: orig_bake(*b_args, **dict(b_kwargs, mode="fast"))
+        try:
+            return orig_to_glb(*g_args, **g_kwargs)
+        finally:
+            pu.bake_texture = orig_bake
+    pu.to_glb = fast_to_glb
+
+    print("[mrGenSfM Low-VRAM] Initializing sequential Stage 1 execution...", flush=True)
     inputs = InputViews(paths, crop_ratio, args.remove_background)
     runtime_dir = output_dir / "_runtime_lowvram"
     runtime_dir.mkdir(parents=True, exist_ok=True)
 
+    # 1. Initialize Evaluator ONLY with Stage 1 models (denoiser, ss_decoder, suv_decoder)
+    stage1_cfgs = {k: all_cfgs[k] for k in ("denoiser", "ss_decoder", "suv_decoder") if k in all_cfgs}
     evaluator = evaluators.VisualImageConditionedMultiPoseSparseFlowMatchingEvaluator(
-        model_cfgs, inputs, output_dir=str(runtime_dir), **options
+        stage1_cfgs, inputs, output_dir=str(runtime_dir), **options
     )
-    for name, model in evaluator.models.items():
+    for model in evaluator.models.values():
         model.eval()
-        model.cpu()
-    torch.cuda.empty_cache()
-
-    # Step 1: DINOv2 image conditioning on GPU, then offload DINOv2 to CPU
     evaluator._init_image_cond_model()
+
     with torch.no_grad():
         cond = inputs.condition[None].to(evaluator.device)
-        # Stage 1 models to GPU
-        for role in ("denoiser", "ss_decoder", "suv_decoder"):
-            if role in evaluator.models:
-                evaluator.models[role].to(evaluator.device)
-        print("[mrGenSfM Low-VRAM] Running Stage 1 (pose & coarse shape)...", flush=True)
+        print("[mrGenSfM Low-VRAM] Running Stage 1 (sparse structure & camera poses)...", flush=True)
         ssuv, _ = evaluator._sample_ssuv(cond=cond)
         extrinsics, intrinsics, _ = evaluator._solve_pose_from_ssuv(
             ssuv["ssuv_recon"].flatten(0, 1), ssuv["uv_volume_pred"].flatten(0, 1)
         )
+        print(f"[mrGenSfM Low-VRAM] Solved camera poses for {len(paths)} views.", flush=True)
 
-        # Offload Stage 1 models to CPU RAM before allocating Stage 2 tensors
+        # Pre-compute Stage 2 visual conditioning with DINOv2
+        print("[mrGenSfM Low-VRAM] Computing visual latent conditioning...", flush=True)
+        slat_cond_args = evaluator.get_inference_cond(cond, type="slat")
+
+        # Stage 1 and DINOv2 are completely finished; free them to release ~2.5GB RAM & VRAM
         for role in ("denoiser", "ss_decoder", "suv_decoder"):
             if role in evaluator.models:
-                evaluator.models[role].cpu()
+                del evaluator.models[role]
+        if hasattr(evaluator, "image_cond_model"):
+            del evaluator.image_cond_model
         gc.collect()
         torch.cuda.empty_cache()
 
-        # Move Stage 2 models to GPU (needed by _make_randn_sparse_latent_from_ss for slat_denoiser.device)
-        for role in ("slat_denoiser", "slat_decoder_gs", "slat_decoder_mesh"):
-            if role in evaluator.models:
-                evaluator.models[role].to(evaluator.device)
+        # 2. Lazy-load Stage 2 slat_denoiser on demand
+        print("[mrGenSfM Low-VRAM] Loading Stage 2 (SLat appearance flow model)...", flush=True)
+        evaluator.models["slat_denoiser"] = eval_base.build_model(all_cfgs["slat_denoiser"], device="cuda")
+        evaluator.load({"slat_denoiser": all_cfgs["slat_denoiser"]})
+        evaluator.models["slat_denoiser"].eval()
+
         noise = evaluator._make_randn_sparse_latent_from_ss(ssuv["ss_recon"])
-        uvs = evaluator._make_sparse_uvs_from_pose(noise, extrinsics[None], intrinsics[None])
-        print("[mrGenSfM Low-VRAM] Running Stage 2 (appearance & fine geometry)...", flush=True)
-        outputs = evaluator._sample_slat(cond=cond, noise=noise, uvs=uvs)
+        slat_cond_args["uvs"] = evaluator._make_sparse_uvs_from_pose(noise, extrinsics[None], intrinsics[None])
 
-        if getattr(evaluator, "image_cond_model", None) and "model" in evaluator.image_cond_model:
-            evaluator.image_cond_model["model"].cpu()
-        for role in ("slat_denoiser", "slat_decoder_gs", "slat_decoder_mesh"):
-            if role in evaluator.models:
-                evaluator.models[role].cpu()
+        print("[mrGenSfM Low-VRAM] Running Stage 2 (SLat diffusion sampling)...", flush=True)
+        res = evaluator.slat_sampler.sample(
+            model=evaluator.models["slat_denoiser"],
+            noise=noise,
+            **slat_cond_args,
+            **evaluator.slat_sampler_params,
+            verbose=False,
+        )
+        pred_x_0 = res.samples
+
+        # Free Stage 2 SLat denoiser (~2.3GB) before running mesh & gaussian decoders
+        del evaluator.models["slat_denoiser"]
         gc.collect()
         torch.cuda.empty_cache()
 
+        # 3. Decode 3D Mesh with CPU-offloaded FlexiCubes extraction (prevents 2.5GB dense grid VRAM spike)
+        print("[mrGenSfM Low-VRAM] Decoding 3D Mesh geometry with CPU FlexiCubes...", flush=True)
+        evaluator.models["slat_decoder_mesh"] = eval_base.build_model(all_cfgs["slat_decoder_mesh"], device="cuda")
+        evaluator.load({"slat_decoder_mesh": all_cfgs["slat_decoder_mesh"]})
+        decoder_mesh = evaluator.models["slat_decoder_mesh"]
+        decoder_mesh.eval()
+
+        decoder_mesh.mesh_extractor = c2m.SparseFeatures2Mesh(
+            device="cpu",
+            res=decoder_mesh.resolution * 4,
+            use_color=decoder_mesh.rep_config.get("use_color", False),
+        )
+        def cpu_to_representation(x):
+            return [decoder_mesh.mesh_extractor(x[i].cpu(), training=decoder_mesh.training) for i in range(x.shape[0])]
+        decoder_mesh.to_representation = cpu_to_representation
+
+        mesh_output = sum([decoder_mesh(pred_x_0[i:i+1]) for i in range(pred_x_0.shape[0])], [])
+        del evaluator.models["slat_decoder_mesh"]
+        gc.collect()
+        torch.cuda.empty_cache()
+
+        # 4. Decode 3D Gaussians
+        print("[mrGenSfM Low-VRAM] Decoding 3D Gaussian Splats...", flush=True)
+        evaluator.models["slat_decoder_gs"] = eval_base.build_model(all_cfgs["slat_decoder_gs"], device="cuda")
+        evaluator.load({"slat_decoder_gs": all_cfgs["slat_decoder_gs"]})
+        evaluator.models["slat_decoder_gs"].eval()
+        gs_output = sum([evaluator.models["slat_decoder_gs"](pred_x_0[i:i+1]) for i in range(pred_x_0.shape[0])], [])
+        del evaluator.models["slat_decoder_gs"]
+        del evaluator
+        gc.collect()
+        torch.cuda.empty_cache()
+
+    outputs = {"mesh": mesh_output, "gaussian": gs_output}
+    print("[mrGenSfM Low-VRAM] Exporting GLB, PLY, and camera reprojections...", flush=True)
     emi.export_result(outputs, extrinsics, intrinsics, inputs, output_dir)
+
     run_meta = {
         "seed": args.seed,
         "num_views": len(paths),
@@ -162,6 +229,7 @@ def main() -> None:
         "pretrained": args.pretrained,
     }
     (output_dir / "run.json").write_text(json.dumps(run_meta, indent=2) + "\\n", encoding="utf-8")
+    print(f"[mrGenSfM Low-VRAM] Reconstruction finished successfully: {output_dir}", flush=True)
 
 
 if __name__ == "__main__":
@@ -238,7 +306,7 @@ def run_gensfm_via_wsl(
         )
 
     wrapper_file = output_dir / "_mr_gensfm_low_vram_exec.py"
-    wrapper_file.write_text(LOW_VRAM_WRAPPER_SCRIPT, encoding="utf-8")
+    wrapper_file.write_bytes(LOW_VRAM_WRAPPER_SCRIPT.replace("\r\n", "\n").encode("utf-8"))
 
     wsl_distro = os.environ.get("GENSFM_WSL_DISTRO", "Ubuntu").strip() or "Ubuntu"
     wsl_conda_env = os.environ.get("GENSFM_WSL_CONDA_ENV", "gensfm").strip() or "gensfm"
@@ -258,31 +326,88 @@ def run_gensfm_via_wsl(
     if remove_background:
         flags += " --remove-background"
 
-    bash_cmd = (
-        "export ATTN_BACKEND=sdpa ATTN_BACKEND_WITH_ATTN_BIAS=sdpa SPCONV_ALGO=native "
-        "PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True; "
-        "for cpath in \"$HOME/miniforge3\" \"$HOME/mambaforge\" \"$HOME/miniconda3\" \"$HOME/anaconda3\" \"/opt/conda\"; do "
-        "  if [ -f \"$cpath/etc/profile.d/conda.sh\" ]; then . \"$cpath/etc/profile.d/conda.sh\"; conda activate "
-        f"{shlex.quote(wsl_conda_env)} 2>/dev/null || true; break; fi; "
-        "done; "
-        f"cd {shlex.quote(wsl_repo)} && "
-        f"python3 {shlex.quote(wsl_wrapper)} "
-        f"--gensfm-root {shlex.quote(wsl_repo)} "
-        f"--images {wsl_imgs} "
-        f"--output-dir {shlex.quote(wsl_out)} "
-        f"--pretrained {shlex.quote(pretrained_model)} "
-        f"{flags}"
+    runner_file = output_dir / "_mr_gensfm_runner.sh"
+    runner_script = (
+        "#!/usr/bin/env bash\n"
+        "set -e\n"
+        "\n"
+        "# Source Conda if present\n"
+        "for cpath in \"$HOME/miniforge3\" \"$HOME/mambaforge\" \"$HOME/miniconda3\" \"$HOME/anaconda3\" \"/opt/conda\"; do\n"
+        "  if [ -f \"$cpath/etc/profile.d/conda.sh\" ]; then\n"
+        "    . \"$cpath/etc/profile.d/conda.sh\"\n"
+        f"    conda activate {shlex.quote(wsl_conda_env)} 2>/dev/null || true\n"
+        "    break\n"
+        "  fi\n"
+        "done\n"
+        "\n"
+        "# Resolve explicit Conda Python executable\n"
+        "PY_BIN=\"\"\n"
+        f"for candidate in \\\n"
+        f"  \"$HOME/miniforge3/envs/{wsl_conda_env}/bin/python\" \\\n"
+        f"  \"$HOME/miniforge3/envs/{wsl_conda_env}/bin/python3\" \\\n"
+        f"  \"$HOME/miniconda3/envs/{wsl_conda_env}/bin/python\" \\\n"
+        f"  \"$HOME/miniconda3/envs/{wsl_conda_env}/bin/python3\" \\\n"
+        f"  \"$HOME/mambaforge/envs/{wsl_conda_env}/bin/python\" \\\n"
+        f"  \"$HOME/mambaforge/envs/{wsl_conda_env}/bin/python3\" \\\n"
+        f"  \"/opt/conda/envs/{wsl_conda_env}/bin/python\" \\\n"
+        f"  \"/opt/conda/envs/{wsl_conda_env}/bin/python3\"; do\n"
+        "  if [ -x \"$candidate\" ]; then\n"
+        "    PY_BIN=\"$candidate\"\n"
+        "    break\n"
+        "  fi\n"
+        "done\n"
+        "\n"
+        "if [ -z \"$PY_BIN\" ]; then\n"
+        "  if command -v python3 >/dev/null 2>&1; then\n"
+        "    PY_BIN=\"$(which python3)\"\n"
+        "  else\n"
+        "    PY_BIN=\"python\"\n"
+        "  fi\n"
+        "fi\n"
+        "\n"
+        "export ATTN_BACKEND=sdpa\n"
+        "export ATTN_BACKEND_WITH_ATTN_BIAS=sdpa\n"
+        "export SPCONV_ALGO=native\n"
+        "export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True\n"
+        "export PYTORCH_ALLOC_CONF=expandable_segments:True\n"
+        "\n"
+        f"cd {shlex.quote(wsl_repo)}\n"
+        f"exec \"$PY_BIN\" {shlex.quote(wsl_wrapper)} \\\n"
+        f"  --gensfm-root {shlex.quote(wsl_repo)} \\\n"
+        f"  --images {wsl_imgs} \\\n"
+        f"  --output-dir {shlex.quote(wsl_out)} \\\n"
+        f"  --pretrained {shlex.quote(pretrained_model)} \\\n"
+        f"  {flags}\n"
     )
+    runner_file.write_bytes(runner_script.replace("\r\n", "\n").encode("utf-8"))
 
-    cmd = ["wsl.exe", "-d", wsl_distro, "--", "bash", "-lc", bash_cmd]
+    wsl_runner = windows_to_wsl_path(runner_file)
+    cmd = ["wsl.exe", "-d", wsl_distro, "--", "bash", wsl_runner]
     if logger:
-        logger.info(f"Executing GenSfM in WSL2 ({wsl_distro}): {bash_cmd}")
+        logger.info(f"Executing GenSfM in WSL2 ({wsl_distro}) via runner script: {wsl_runner}")
 
-    proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    proc = subprocess.Popen(
+        cmd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        bufsize=1,
+    )
+    captured_lines = []
+    if proc.stdout:
+        for line in iter(proc.stdout.readline, ""):
+            line_str = line.rstrip()
+            if line_str:
+                captured_lines.append(line_str)
+                if logger:
+                    logger.info(f"[WSL2 GenSfM] {line_str}")
+        proc.stdout.close()
+    proc.wait()
     if proc.returncode != 0:
+        combined_output = "\n".join(captured_lines)
         raise RuntimeError(
             f"WSL2 GenSfM execution exited with code {proc.returncode}.\n"
-            f"STDOUT: {proc.stdout}\nSTDERR: {proc.stderr}"
+            f"Output:\n{combined_output}"
         )
 
     return output_dir
