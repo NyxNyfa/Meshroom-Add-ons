@@ -576,11 +576,10 @@ class TestMrGenSfMPipeline(unittest.TestCase):
             self.assertEqual(h_graph["Texturing_Dense"]["inputs"]["imagesFolder"], "{DepthMap_Dense.imagesFolder}")
             self.assertEqual(h_graph["Texturing_Dense"]["inputs"]["inputMesh"], "{MeshFiltering_Dense.outputMesh}")
 
-            # Verify Viewport guidance labels & comments on Texturing_Fast and Texturing_Dense
+            # Verify clean labels & comments on Texturing_Fast and Texturing_Dense
             for tx_node in ["Texturing_Fast", "Texturing_Dense"]:
                 internal_in = h_graph[tx_node].get("internalInputs", {})
-                self.assertIn("Double-click to view 3D in Viewport", internal_in.get("label", ""))
-                self.assertIn("Double-click to view 3D in Viewport", internal_in.get("comment", ""))
+                self.assertEqual(internal_in.get("label", ""), tx_node)
 
             # Verify Publish_Comparison gathers all 9 comparison artifacts
             pub_files = h_graph["Publish_Comparison"]["inputs"]["inputFiles"]

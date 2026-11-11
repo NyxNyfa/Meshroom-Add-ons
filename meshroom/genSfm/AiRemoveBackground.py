@@ -89,7 +89,7 @@ AI Foreground Segmentation & Background Removal Node (`AiRemoveBackground`).
         ),
         desc.File(
             name="outputMasks",
-            label="Foreground Mask (Active View)",
+            label="Foreground Mask",
             description="Grayscale alpha mask synced with the selected image in the 2D Image Gallery.",
             semantic="image",
             value="{nodeCacheFolder}/mask_<VIEW_ID>.png",
@@ -97,7 +97,7 @@ AI Foreground Segmentation & Background Removal Node (`AiRemoveBackground`).
         ),
         desc.File(
             name="outputRgba",
-            label="Cutout RGBA (Active View)",
+            label="Cutout RGBA",
             description="Cutout transparent RGBA image synced with the selected image in the 2D Image Gallery.",
             semantic="image",
             value="{nodeCacheFolder}/rgba_<VIEW_ID>.png",

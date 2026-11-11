@@ -25,8 +25,8 @@
             "inputs": {},
             "internalInputs": {
                 "invalidation": "",
-                "comment": "Drop 2 to 4 uncalibrated object photos from random viewpoints here.",
-                "label": "CameraInit (2-4 Random Photos)",
+                "comment": "Input photos from random viewpoints.",
+                "label": "CameraInit",
                 "color": ""
             }
         },
@@ -42,8 +42,8 @@
             },
             "internalInputs": {
                 "invalidation": "",
-                "comment": "AI Core Reconstructor: Generates direct 3D mesh (outputMeshObj) + sparse cameras (outputSfMData) AND 24 orbital 360-deg synthetic views (outputSfMDataDense). Double-click to view 3D in Viewport.",
-                "label": "GenSfM (24 Orbit Views + AI Mesh)",
+                "comment": "AI Core Reconstructor: Generates direct 3D mesh, sparse cameras, and dense orbital synthetic views.",
+                "label": "GenSfM",
                 "color": "#2b7bba"
             }
         },
@@ -101,8 +101,8 @@
             },
             "internalInputs": {
                 "invalidation": "",
-                "comment": "Double-click to view 3D in Viewport (Fast Direct AI Polish Branch - 4096px Multi-Band UV Texture).",
-                "label": "Texturing_Fast (Double-click to view 3D in Viewport)",
+                "comment": "Fast Direct AI Polish Branch - 4096px Multi-Band UV Texture.",
+                "label": "Texturing_Fast",
                 "color": "#2ca02c"
             }
         },
@@ -117,8 +117,8 @@
             },
             "internalInputs": {
                 "invalidation": "",
-                "comment": "Dense Branch: Undistorts original views + 24 synthetic 360-deg orbital views from sfmDataDense.abc.",
-                "label": "PrepareDenseScene_Dense (28 Views)",
+                "comment": "Dense Branch: Undistorts original views and synthetic 360-degree orbital views.",
+                "label": "PrepareDenseScene_Dense",
                 "color": "#ff7f0e"
             }
         },
@@ -211,8 +211,8 @@
             },
             "internalInputs": {
                 "invalidation": "",
-                "comment": "Double-click to view 3D in Viewport (Dense Sparse-to-Dense MVS Photogrammetry Branch - 28-View UV Texture).",
-                "label": "Texturing_Dense (Double-click to view 3D in Viewport)",
+                "comment": "Dense Sparse-to-Dense MVS Photogrammetry Branch - Multi-View UV Texture.",
+                "label": "Texturing_Dense",
                 "color": "#ff7f0e"
             }
         },
@@ -241,8 +241,8 @@
             },
             "internalInputs": {
                 "invalidation": "",
-                "comment": "Side-by-Side Comparison Publisher: Collects native textured mesh (OBJ+MTL+PNG), GLB, and 3D Gaussian Splats alongside Texturing_Fast and Texturing_Dense.",
-                "label": "Publish_Comparison (Fast vs Dense Side-by-Side)",
+                "comment": "Comparison Publisher: Collects native textured mesh, GLB, and 3D Gaussian Splats alongside Texturing_Fast and Texturing_Dense.",
+                "label": "Publish_Comparison",
                 "color": "#9467bd"
             }
         }

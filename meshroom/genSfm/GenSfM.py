@@ -115,7 +115,7 @@ Standard Meshroom pipelines require 30–150+ sequential photos with >60% overla
         ),
         desc.ChoiceParam(
             name="aiProvider",
-            label="AI / Cloud Provider (Advanced)",
+            label="AI Provider",
             description="AI API provider (optional/advanced).",
             value="gemini",
             values=[
@@ -133,7 +133,7 @@ Standard Meshroom pipelines require 30–150+ sequential photos with >60% overla
         ),
         desc.StringParam(
             name="aiModelName",
-            label="AI Model Name (Advanced)",
+            label="AI Model Name",
             description="Model identifier for legacy provider.",
             value="gemini-3.8-flash",
             advanced=True,
@@ -141,7 +141,7 @@ Standard Meshroom pipelines require 30–150+ sequential photos with >60% overla
         ),
         desc.BoolParam(
             name="lowVramMode",
-            label="Low-VRAM Mode (4GB-8GB GPU)",
+            label="Low-VRAM Mode",
             description="Enable FP16 precision, expandable CUDA segments, and sequential Stage 1 / Stage 2 CPU-GPU offloading for laptops with 4GB-8GB VRAM.",
             value=True,
             invalidate=False,
@@ -162,7 +162,7 @@ Standard Meshroom pipelines require 30–150+ sequential photos with >60% overla
         ),
         desc.IntParam(
             name="generateSyntheticViews",
-            label="Generate Synthetic Views (360-deg Orbit)",
+            label="Generate Synthetic Views",
             description="Number of dense synthetic 360-deg orbital multi-view images to render from the reconstructed 3D model "
                         "(default 24 = renders 24 multi-elevation views at 15, 32, -8 deg into sfmDataDense.abc for Dense MVS; "
                         "0 = disabled / keep only 2-4 sparse views).",
@@ -187,7 +187,7 @@ Standard Meshroom pipelines require 30–150+ sequential photos with >60% overla
         ),
         desc.IntParam(
             name="cloudTimeoutSec",
-            label="Cloud Timeout (sec)",
+            label="Cloud Timeout",
             description="Request timeout in seconds for Cloud AI inference.",
             value=300,
             range=(10, 3600, 10),
@@ -236,30 +236,30 @@ Standard Meshroom pipelines require 30–150+ sequential photos with >60% overla
     outputs = [
         desc.File(
             name="outputSfMData",
-            label="SfMData (Alembic - Double-Click to View Cameras)",
-            description="Primary sparse SfM output to Meshroom Fast Branch: camera intrinsics, predicted extrinsic poses, and colored sparse point cloud in AliceVision SfMData (.abc) format. Double-click node to view camera frustums in 3D Viewer.",
+            label="SfMData",
+            description="Primary sparse SfM output: camera intrinsics, predicted extrinsic poses, and colored sparse point cloud in AliceVision SfMData (.abc) format.",
             semantic="3d",
             value="{nodeCacheFolder}/sfmData.abc",
             group="",
         ),
         desc.File(
             name="outputMeshObj",
-            label="Textured Mesh (OBJ - Double-Click to View 3D)",
-            description="Textured 3D mesh (.obj + .mtl + mesh_texture.png) in AliceVision coordinate system, ready for 3D Viewer, MeshFiltering_Fast, or Texturing_Fast.",
+            label="Textured Mesh",
+            description="Textured 3D mesh (.obj + .mtl + mesh_texture.png) in AliceVision coordinate system, ready for 3D Viewer, MeshFiltering, or Texturing.",
             semantic="3d",
             value="{nodeCacheFolder}/mesh.obj",
             group="",
         ),
         desc.File(
             name="outputMeshMtl",
-            label="Mesh Material (MTL)",
+            label="Mesh Material",
             description="Wavefront material definition linking mesh.obj to mesh_texture.png.",
             value="{nodeCacheFolder}/mesh.mtl",
             group="",
         ),
         desc.File(
             name="outputMeshTexture",
-            label="Mesh Texture (PNG)",
+            label="Mesh Texture",
             description="360-degree diffuse texture map for mesh.obj.",
             semantic="image",
             value="{nodeCacheFolder}/mesh_texture.png",
@@ -267,28 +267,28 @@ Standard Meshroom pipelines require 30–150+ sequential photos with >60% overla
         ),
         desc.File(
             name="outputMeshGlb",
-            label="Textured Mesh (GLB)",
-            description="Native GenSfM textured 3D mesh in glTF 2.0 binary (.glb) Y-up (x, z, -y) coordinates for Blender/Unity/Unreal.",
+            label="GLB Mesh",
+            description="Native GenSfM textured 3D mesh in glTF 2.0 binary (.glb) Y-up coordinates.",
             value="{nodeCacheFolder}/mesh.glb",
             group="",
         ),
         desc.File(
             name="outputGaussianPly",
-            label="3D Gaussian Splats (PLY)",
+            label="Gaussian Splats",
             description="3D Gaussian Splatting representation (.ply), compatible with mrGSplat and 3D point cloud viewers.",
             value="{nodeCacheFolder}/gaussian.ply",
             group="",
         ),
         desc.File(
             name="outputCamerasJson",
-            label="GenSfM Cameras JSON",
-            description="Raw predicted OpenCV extrinsics (Z-up), normalized intrinsics, and data_to_mesh matrix from GenSfM.",
+            label="Cameras",
+            description="Predicted camera extrinsics, normalized intrinsics, and data_to_mesh matrix from GenSfM.",
             value="{nodeCacheFolder}/cameras.json",
             group="",
         ),
         desc.File(
             name="outputMaskedInputs",
-            label="Masked RGBA Inputs",
+            label="Masked Inputs",
             description="Cropped and background-segmented RGBA object images for inspection in the 2D Viewer.",
             semantic="imageList",
             value="{nodeCacheFolder}/input-rgba-*.png",
@@ -296,7 +296,7 @@ Standard Meshroom pipelines require 30–150+ sequential photos with >60% overla
         ),
         desc.File(
             name="outputReprojections",
-            label="Camera Reprojections",
+            label="Reprojections",
             description="Rendered textured mesh from predicted camera viewpoints to validate pose accuracy in the 2D Viewer.",
             semantic="imageList",
             value="{nodeCacheFolder}/reprojection-*.png",
@@ -304,22 +304,22 @@ Standard Meshroom pipelines require 30–150+ sequential photos with >60% overla
         ),
         desc.File(
             name="outputSfMDataDense",
-            label="Dense Synthetic SfMData (24+ Views Alembic)",
-            description="Enriched SfMData (.abc) containing the original views plus 24 synthetic 360-deg orbital multi-view renders (synthetic_views/) for PrepareDenseScene_Dense and full MVS photogrammetry.",
+            label="Dense SfMData",
+            description="Enriched SfMData (.abc) containing the original views plus synthetic 360-degree orbital multi-view renders for PrepareDenseScene and full MVS photogrammetry.",
             semantic="3d",
             value="{nodeCacheFolder}/sfmDataDense.abc",
             group="",
         ),
         desc.File(
             name="outputSfMDataJson",
-            label="SfMData (JSON .sfm)",
+            label="SfMData JSON",
             description="Recovered camera poses and intrinsics in AliceVision JSON (.sfm) format for downstream nodes.",
             value="{nodeCacheFolder}/sfmData.sfm",
             group="",
         ),
         desc.File(
             name="outputReprojectionByView",
-            label="Reprojection (Active View)",
+            label="Reprojection",
             description="Rendered mesh reprojection synced with the selected viewpoint in the Image Gallery.",
             semantic="image",
             value="{nodeCacheFolder}/reprojection_<VIEW_ID>.png",
@@ -327,7 +327,7 @@ Standard Meshroom pipelines require 30–150+ sequential photos with >60% overla
         ),
         desc.File(
             name="outputMaskByView",
-            label="Foreground Mask (Active View)",
+            label="Foreground Mask",
             description="Foreground RGBA mask synced with the selected viewpoint in the Image Gallery.",
             semantic="image",
             value="{nodeCacheFolder}/mask_<VIEW_ID>.png",
