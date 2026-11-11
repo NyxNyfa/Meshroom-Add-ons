@@ -271,6 +271,28 @@ Node `GenSfM` secara mandiri mengekspor aset 3D siap pakai:
 3. **Koneksi Node Publish:**
    Node `Publish` sekarang dikonfigurasi untuk langsung mengumpulkan `outputMeshObj`, `outputMeshMtl`, `outputMeshTexture`, `outputMeshGlb`, dan `outputGaussianPly` dari `GenSfM`, sehingga seluruh file 3D final langsung tersimpan rapi di folder publikasi begitu `GenSfM` selesai.
 
+---
+
+## 9. Workspace Bersih & File Proyek Baru (`mrGenSfM_Project.mg`)
+
+1. **Arsip Eksperimen Lama:**
+   Seluruh file proyek dan folder output uji coba sebelumnya telah dipindahkan ke direktori khusus arsip:
+   - `D:/Meshroom/demo/mrGenSfM_Hybrid_Demo.mg`
+   - `D:/Meshroom/demo/mrGenSfM_Wagon_Demo.mg`
+   - `D:/Meshroom/demo/Published_Hybrid_Output/`
+   - `D:/Meshroom/demo/Published_Wagon_Output/`
+
+2. **File Proyek Baru Siap Pakai:**
+   - [`D:/Meshroom/mrGenSfM_Project.mg`](file:///D:/Meshroom/mrGenSfM_Project.mg): File scene Meshroom 2025.1.0 baru dengan konfigurasi pipeline teruji, memuat 4 foto objek Anda (`griffin/1.png` - `4.png`) yang langsung terhubung ke node `GenSfM_1` (U2-Net background removal + native 3D diffusion) dan `Publish_Outputs`.
+
+3. **Folder Output Utama:**
+   - [`D:/Meshroom/Published_Output/`](file:///D:/Meshroom/Published_Output/): Menyimpan hasil akhir 3D:
+     * `mesh.obj` + `mesh.mtl` + `mesh_texture.png` (Textured 3D Mesh)
+     * `mesh.glb` (Standalone binary glTF mesh)
+     * `gaussian.ply` (3D Gaussian Splatting)
+     * `sfmData.abc` (Camera SfMData & point cloud)
+
+
 
 
 
