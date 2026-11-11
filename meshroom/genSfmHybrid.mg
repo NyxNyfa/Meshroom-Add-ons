@@ -224,20 +224,24 @@
             ],
             "inputs": {
                 "inputFiles": [
+                    "{GenSfM_1.outputMeshObj}",
+                    "{GenSfM_1.outputMeshMtl}",
+                    "{GenSfM_1.outputMeshTexture}",
+                    "{GenSfM_1.outputMeshGlb}",
+                    "{GenSfM_1.outputGaussianPly}",
+                    "{GenSfM_1.outputSfMData}",
                     "{Texturing_Fast.outputMesh}",
                     "{Texturing_Fast.outputMaterial}",
                     "{Texturing_Fast.outputTextures}",
                     "{Texturing_Dense.outputMesh}",
                     "{Texturing_Dense.outputMaterial}",
                     "{Texturing_Dense.outputTextures}",
-                    "{GenSfM_1.outputMeshGlb}",
-                    "{GenSfM_1.outputGaussianPly}",
                     "{GenSfM_1.outputSfMDataDense}"
                 ]
             },
             "internalInputs": {
                 "invalidation": "",
-                "comment": "Side-by-Side Comparison Publisher: Collects final meshes, materials, and 4K textures from both Texturing_Fast and Texturing_Dense alongside GenSfM's native GLB, 3D Gaussian Splats, and 28-view sfmDataDense.abc.",
+                "comment": "Side-by-Side Comparison Publisher: Collects native textured mesh (OBJ+MTL+PNG), GLB, and 3D Gaussian Splats alongside Texturing_Fast and Texturing_Dense.",
                 "label": "Publish_Comparison (Fast vs Dense Side-by-Side)",
                 "color": "#9467bd"
             }

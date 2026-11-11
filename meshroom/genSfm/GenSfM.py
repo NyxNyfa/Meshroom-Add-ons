@@ -251,6 +251,21 @@ Standard Meshroom pipelines require 30–150+ sequential photos with >60% overla
             group="",
         ),
         desc.File(
+            name="outputMeshMtl",
+            label="Mesh Material (MTL)",
+            description="Wavefront material definition linking mesh.obj to mesh_texture.png.",
+            value="{nodeCacheFolder}/mesh.mtl",
+            group="",
+        ),
+        desc.File(
+            name="outputMeshTexture",
+            label="Mesh Texture (PNG)",
+            description="360-degree diffuse texture map for mesh.obj.",
+            semantic="image",
+            value="{nodeCacheFolder}/mesh_texture.png",
+            group="",
+        ),
+        desc.File(
             name="outputMeshGlb",
             label="Textured Mesh (GLB)",
             description="Native GenSfM textured 3D mesh in glTF 2.0 binary (.glb) Y-up (x, z, -y) coordinates for Blender/Unity/Unreal.",

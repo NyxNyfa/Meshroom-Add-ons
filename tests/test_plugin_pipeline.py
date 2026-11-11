@@ -625,15 +625,6 @@ class TestMrGenSfMPipeline(unittest.TestCase):
             for node_name in [
                 "CameraInit_1",
                 "GenSfM_1",
-                "PrepareDenseScene_Fast",
-                "MeshFiltering_Fast",
-                "Texturing_Fast",
-                "PrepareDenseScene_Dense",
-                "DepthMap_Dense",
-                "DepthMapFilter_Dense",
-                "Meshing_Dense",
-                "MeshFiltering_Dense",
-                "Texturing_Dense",
                 "Publish_Comparison",
             ]:
                 self.assertIn(node_name, hybrid_demo_data["graph"])

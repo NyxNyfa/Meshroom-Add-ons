@@ -252,5 +252,25 @@ Ikuti langkah-langkah berikut untuk menjalankan rekonstruksi di Meshroom:
 ### E. Penanganan Line Ending Skrip WSL2 (CRLF vs LF):
 * Skrip bash sementara (`_wsl_masking_runner.sh`) yang dibuat dari Windows untuk dieksekusi di WSL2 wajib ditulis dengan newline Unix (`\n` / LF) menggunakan `.write_bytes(sh_content.replace("\r\n", "\n").encode("utf-8"))`. Jika ditulis dengan CRLF Windows (`\r\n`), bash WSL akan memunculkan error `set: -: invalid option` dan `syntax error near unexpected token`.
 
+---
+
+## 8. Arsitektur Output Langsung (Textured Mesh & 3D Gaussian Splatting)
+
+### A. Mengapa Node Texturing Klasik Merusak Tekstur AI:
+1. **Pelepasan Koordinat UV oleh MeshFiltering:**
+   Proses smoothing Laplacian bawaan Meshroom (`aliceVision_meshFiltering`) menghapus baris koordinat `vt` (UV) dari file OBJ.
+2. **Kekurangan Sudut Foto pada Rekonstruksi Sparse:**
+   Node `Texturing` klasik dirancang untuk 30–100+ foto berurutan dengan overlap tinggi. Dengan hanya 2–4 foto sparse bersudut acak, reprojeksi piksel kamera meninggalkan banyak area gelap/kosong (*occluded triangles*).
+
+### B. Solusi: Ekspor Native GenSfM (Dual Output Asset):
+Node `GenSfM` secara mandiri mengekspor aset 3D siap pakai:
+1. **Textured 3D Mesh (OBJ + MTL + PNG & GLB):**
+   Memiliki tekstur 360° lengkap tanpa jahitan/lubang hasil generasi difusi penampilan (*SLat appearance diffusion*).
+2. **3D Gaussian Splatting (PLY):**
+   File `gaussian.ply` berukuran ~20 MB dengan koordinat Gaussian warna penuh untuk visualisasi real-time.
+3. **Koneksi Node Publish:**
+   Node `Publish` sekarang dikonfigurasi untuk langsung mengumpulkan `outputMeshObj`, `outputMeshMtl`, `outputMeshTexture`, `outputMeshGlb`, dan `outputGaussianPly` dari `GenSfM`, sehingga seluruh file 3D final langsung tersimpan rapi di folder publikasi begitu `GenSfM` selesai.
+
+
 
 

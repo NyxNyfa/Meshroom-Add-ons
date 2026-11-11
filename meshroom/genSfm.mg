@@ -80,12 +80,15 @@
             ],
             "inputs": {
                 "inputFiles": [
-                    "{Texturing_1.outputMesh}",
-                    "{Texturing_1.outputMaterial}",
-                    "{Texturing_1.outputTextures}",
+                    "{GenSfM_1.outputMeshObj}",
+                    "{GenSfM_1.outputMeshMtl}",
+                    "{GenSfM_1.outputMeshTexture}",
                     "{GenSfM_1.outputMeshGlb}",
                     "{GenSfM_1.outputGaussianPly}",
-                    "{GenSfM_1.outputSfMData}"
+                    "{GenSfM_1.outputSfMData}",
+                    "{Texturing_1.outputMesh}",
+                    "{Texturing_1.outputMaterial}",
+                    "{Texturing_1.outputTextures}"
                 ]
             }
         }
