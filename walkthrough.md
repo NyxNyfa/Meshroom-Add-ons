@@ -308,3 +308,55 @@ Node `GenSfM` secara mandiri mengekspor aset 3D siap pakai:
 * Menghilangkan seluruh tag panduan tutorial di dalam tanda kurung pada nama port dan label node (`(24 Orbit Views + AI Mesh)`, `(Alembic - Double-Click to View Cameras)`, `(OBJ - Double-Click to View 3D)`, dll.).
 * Seluruh port kini menggunakan format standar industri AliceVision: `SfMData`, `Textured Mesh`, `Mesh Material`, `Mesh Texture`, `GLB Mesh`, `Gaussian Splats`, `Cameras`, `Dense SfMData`, `Reprojection`, dan `Foreground Mask`.
 
+---
+
+## 11. Penyederhanaan Arsitektur Menjadi 1 Node All-in-One (`CameraInit -> GenSfM -> Publish_Outputs`)
+
+### A. Latar Belakang & Evaluasi Desain Pipeline
+Pada awal perancangan, dicoba pendekatan *Dual-Branch Hybrid* yang menghubungkan output AI ke cabang klasik photogrammetry AliceVision (`PrepareDenseScene`, `MeshFiltering`, `Texturing`, `DepthMap`, `Meshing`). Namun dari serangkaian pengujian terbukti bahwa:
+1. **MeshFiltering Bawaan Merusak UV:**
+   Operator smoothing Laplacian bawaan Meshroom membuang koordinat peta UV (`vt`) dari mesh hasil ekstraksi AI.
+2. **Texturing Klasik Gagal pada Sudut Ekstrem (Sparse):**
+   Node `Texturing` klasik dirancang untuk memproyeksikan kembali puluhan foto yang saling tumpang tindih (*overlap* >60%). Dengan hanya 2–4 foto acak, reprojeksi foto menghasilkan banyak segitiga gelap/hitam (*occluded faces*).
+3. **Kompleksitas Tidak Perlu:**
+   Node `GenSfM` secara mandiri telah memiliki mesin rekonstruksi, pembersihan latar (*auto rembg*), dan pemanggangan tekstur 360° yang jauh lebih rapi, konsisten, dan fotorealistis.
+
+### B. Strategi Pemisahan Lingkungan (Lokal vs GitHub Remote)
+Untuk menjaga repositori publik tetap bersih dan profesional kelas rilis:
+* **Lingkungan Lokal (`D:/Meshroom/demo/legacy_nodes/`):**
+  File-file eksperimen lama, modul hybrid 12-node, dan node sekunder diarsipkan secara aman di luar repositori plugin git:
+  * `AiRemoveBackground.py`
+  * `genSfmHybrid.mg`
+  * `genSfmDensePhotogrammetry.mg`
+  * `genSfmTemplate.mg`
+* **Repositori GitHub Remote (`mrGenSfM`):**
+  Hanya mempublikasikan arsitektur murni:
+  * **1 Node Kustom:** [`GenSfM.py`](file:///D:/Meshroom/mrGenSfM/meshroom/genSfm/GenSfM.py) (sudah mencakup AI background removal, joint pose estimation, mesh extraction, dan multi-view texture baking).
+  * **1 Template Graph Resmi:** [`meshroom/genSfm.mg`](file:///D:/Meshroom/mrGenSfM/meshroom/genSfm.mg) (alur 3-node elegan: `CameraInit` $\rightarrow$ `GenSfM` $\rightarrow$ `Publish_Outputs`).
+  * Konfigurasi metadata terdaftar tunggal di [`pyproject.toml`](file:///D:/Meshroom/mrGenSfM/pyproject.toml) dan [`meshroom/config.json`](file:///D:/Meshroom/mrGenSfM/meshroom/config.json).
+
+---
+
+## 12. Pemanfaatan & Integrasi Aset Akhir
+
+Setelah eksekusi node `GenSfM` dan `Publish_Outputs` selesai, folder [`D:/Meshroom/Published_Output/`](file:///D:/Meshroom/Published_Output/) memuat seluruh ekspor aset 3D siap pakai:
+
+| Aset | Format File | Ukuran Tipikal | Pemanfaatan / Kompatibilitas |
+| :--- | :--- | :--- | :--- |
+| **Textured Mesh (OBJ)** | `mesh.obj` + `mesh.mtl` + `mesh_texture.png` | ~1.0 MB (Mesh) + 1.4 MB (Texture) | Standar Wavefront untuk 3D Viewer bawaan Meshroom (Qt3D SceneLoader) dan software CAD/DCC klasik. |
+| **Binary glTF (GLB)** | `mesh.glb` | ~1.7 MB | Format standar industri game engine & real-time (Blender, Unreal Engine 5, Unity, Godot, Three.js) dengan material PBR terintegrasi. |
+| **3D Gaussian Splats** | `gaussian.ply` | ~19–20 MB | Format Gaussian Splatting standar dengan koefisien Spherical Harmonics untuk `mrGSplat`, WebGL 3DGS, dan SuperSplat. |
+| **Camera Poses** | `sfmData.abc` | ~800 KB | Format Alembic AliceVision untuk visualisasi frustum kamera dan integrasi tracking VFX. |
+
+---
+
+## 13. Rangkuman Status Akhir & Milestone Keberhasilan
+
+1. **Masalah OOM (4GB VRAM):** Tuntas terpecahkan melalui *Low-VRAM sequential stage offloading* dan *CPU FlexiCubes*.
+2. **Masalah Background Removal:** Terintegrasi penuh ke dalam parameter `maskingStrategy="auto_rembg"` (U2-Net) di dalam node `GenSfM`.
+3. **Masalah Tekstur Luntur/Camouflage:** Tuntas diperbaiki pada kode upstream `postprocessing_utils.py` melalui sinkronisasi `mask_obs` 100 sudut multi-view dan tensor `float32`.
+4. **Masalah Penamaan & Tampilan Graf:** Standarisasi penamaan bersih (*clean & professional*) tanpa tag tanda kurung tutorial.
+5. **Arsitektur Ramping:** Satu node mandiri `GenSfM` yang mengonversi 2–4 foto acak menjadi model 3D lengkap dalam waktu ~2,5 hingga 3,5 menit di GPU laptop.
+6. **Integritas Kode & Repositori:** Seluruh 9 unit test diverifikasi lulus (`OK`), repositori tersinkronisasi bersih di GitHub remote [`MrGenSfM`](https://github.com/NyxNyfa/MrGenSfM.git).
+
+
