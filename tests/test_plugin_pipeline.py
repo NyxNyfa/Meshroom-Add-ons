@@ -481,153 +481,53 @@ class TestMrGenSfMPipeline(unittest.TestCase):
         self.assertFalse(part_file.exists())
 
     def test_downstream_meshroom_pipeline_templates_and_wagon_demo(self) -> None:
-        # 1. Validate Path 1 templates (genSfm.mg & genSfmTemplate.mg)
-        for tpl_rel in ["meshroom/genSfm.mg", "meshroom/genSfm/genSfmTemplate.mg"]:
-            tpl_path = PLUGIN_ROOT / tpl_rel
-            self.assertTrue(tpl_path.is_file(), f"Missing template: {tpl_path}")
-            tpl = json.loads(tpl_path.read_text(encoding="utf-8"))
-            self.assertTrue(tpl["header"].get("template", False))
-            graph = tpl["graph"]
-            for node_name in [
-                "CameraInit_1",
-                "GenSfM_1",
-                "PrepareDenseScene_1",
-                "MeshFiltering_1",
-                "Texturing_1",
-                "Publish_1",
-            ]:
-                self.assertIn(node_name, graph, f"{node_name} missing in {tpl_rel}")
-            self.assertEqual(graph["GenSfM_1"]["inputs"]["input"], "{CameraInit_1.output}")
-            self.assertEqual(graph["PrepareDenseScene_1"]["inputs"]["input"], "{GenSfM_1.outputSfMData}")
-            self.assertEqual(graph["MeshFiltering_1"]["inputs"]["inputMesh"], "{GenSfM_1.outputMeshObj}")
-            self.assertEqual(graph["Texturing_1"]["inputs"]["input"], "{GenSfM_1.outputSfMData}")
-            self.assertEqual(graph["Texturing_1"]["inputs"]["imagesFolder"], "{PrepareDenseScene_1.output}")
-            self.assertEqual(graph["Texturing_1"]["inputs"]["inputMesh"], "{MeshFiltering_1.outputMesh}")
-            self.assertIn("{Texturing_1.outputMesh}", graph["Publish_1"]["inputs"]["inputFiles"])
-
-        # 2. Validate Path 2 Sparse-to-Dense MVS template (genSfmDensePhotogrammetry.mg)
-        dense_tpl_path = PLUGIN_ROOT / "meshroom/genSfmDensePhotogrammetry.mg"
-        self.assertTrue(dense_tpl_path.is_file())
-        dense_tpl = json.loads(dense_tpl_path.read_text(encoding="utf-8"))
-        self.assertTrue(dense_tpl["header"].get("template", False))
-        d_graph = dense_tpl["graph"]
+        # 1. Validate Streamlined 3-Node Template (genSfm.mg: CameraInit -> GenSfM -> Publish_Outputs)
+        tpl_path = PLUGIN_ROOT / "meshroom/genSfm.mg"
+        self.assertTrue(tpl_path.is_file(), f"Missing template: {tpl_path}")
+        tpl = json.loads(tpl_path.read_text(encoding="utf-8"))
+        self.assertTrue(tpl["header"].get("template", False))
+        graph = tpl["graph"]
         for node_name in [
             "CameraInit_1",
             "GenSfM_1",
-            "PrepareDenseScene_1",
-            "DepthMap_1",
-            "DepthMapFilter_1",
-            "Meshing_1",
-            "MeshFiltering_1",
-            "Texturing_1",
-            "Publish_1",
+            "Publish_Outputs",
         ]:
-            self.assertIn(node_name, d_graph)
-        self.assertEqual(d_graph["GenSfM_1"]["inputs"]["generateSyntheticViews"], 24)
-        self.assertEqual(d_graph["PrepareDenseScene_1"]["inputs"]["input"], "{GenSfM_1.outputSfMDataDense}")
-        self.assertEqual(d_graph["DepthMap_1"]["inputs"]["imagesFolder"], "{PrepareDenseScene_1.output}")
-        self.assertEqual(d_graph["Texturing_1"]["inputs"]["inputMesh"], "{MeshFiltering_1.outputMesh}")
+            self.assertIn(node_name, graph, f"{node_name} missing in genSfm.mg")
 
-        # 3. Validate Unified Dual-Branch Hybrid Template (genSfmHybrid.mg)
-        for hybrid_rel in ["meshroom/genSfmHybrid.mg", "meshroom/genSfm/genSfmHybrid.mg"]:
-            hybrid_path = PLUGIN_ROOT / hybrid_rel
-            self.assertTrue(hybrid_path.is_file(), f"Missing hybrid template: {hybrid_path}")
-            hybrid_tpl = json.loads(hybrid_path.read_text(encoding="utf-8"))
-            self.assertTrue(hybrid_tpl["header"].get("template", False))
-            h_graph = hybrid_tpl["graph"]
-            expected_hybrid_nodes = [
-                "CameraInit_1",
-                "GenSfM_1",
-                "PrepareDenseScene_Fast",
-                "MeshFiltering_Fast",
-                "Texturing_Fast",
-                "PrepareDenseScene_Dense",
-                "DepthMap_Dense",
-                "DepthMapFilter_Dense",
-                "Meshing_Dense",
-                "MeshFiltering_Dense",
-                "Texturing_Dense",
-                "Publish_Comparison",
-            ]
-            for node_name in expected_hybrid_nodes:
-                self.assertIn(node_name, h_graph, f"{node_name} missing in {hybrid_rel}")
+        # Verify connections
+        self.assertEqual(graph["GenSfM_1"]["inputs"]["input"], "{CameraInit_1.output}")
+        self.assertEqual(graph["GenSfM_1"]["inputs"].get("maskingStrategy"), "auto_rembg")
 
-            # Verify Input & GenSfM_1 default synthetic views
-            self.assertEqual(h_graph["GenSfM_1"]["inputs"]["input"], "{CameraInit_1.output}")
-            self.assertEqual(h_graph["GenSfM_1"]["inputs"]["generateSyntheticViews"], 24)
+        pub_files = graph["Publish_Outputs"]["inputs"]["inputFiles"]
+        for expected_ref in [
+            "{GenSfM_1.outputMeshObj}",
+            "{GenSfM_1.outputMeshMtl}",
+            "{GenSfM_1.outputMeshTexture}",
+            "{GenSfM_1.outputMeshGlb}",
+            "{GenSfM_1.outputGaussianPly}",
+            "{GenSfM_1.outputSfMData}",
+        ]:
+            self.assertIn(expected_ref, pub_files)
 
-            # Verify Fast Branch (Direct AI Polish) connections
-            self.assertEqual(h_graph["PrepareDenseScene_Fast"]["inputs"]["input"], "{GenSfM_1.outputSfMData}")
-            self.assertEqual(h_graph["MeshFiltering_Fast"]["inputs"]["inputMesh"], "{GenSfM_1.outputMeshObj}")
-            self.assertEqual(h_graph["Texturing_Fast"]["inputs"]["input"], "{GenSfM_1.outputSfMData}")
-            self.assertEqual(h_graph["Texturing_Fast"]["inputs"]["imagesFolder"], "{PrepareDenseScene_Fast.output}")
-            self.assertEqual(h_graph["Texturing_Fast"]["inputs"]["inputMesh"], "{MeshFiltering_Fast.outputMesh}")
-
-            # Verify Dense Branch (Sparse-to-Dense MVS Photogrammetry) connections
-            self.assertEqual(h_graph["PrepareDenseScene_Dense"]["inputs"]["input"], "{GenSfM_1.outputSfMDataDense}")
-            self.assertEqual(h_graph["DepthMap_Dense"]["inputs"]["input"], "{PrepareDenseScene_Dense.input}")
-            self.assertEqual(h_graph["DepthMap_Dense"]["inputs"]["imagesFolder"], "{PrepareDenseScene_Dense.output}")
-            self.assertEqual(h_graph["DepthMapFilter_Dense"]["inputs"]["input"], "{DepthMap_Dense.input}")
-            self.assertEqual(h_graph["DepthMapFilter_Dense"]["inputs"]["depthMapsFolder"], "{DepthMap_Dense.output}")
-            self.assertEqual(h_graph["Meshing_Dense"]["inputs"]["input"], "{DepthMapFilter_Dense.input}")
-            self.assertEqual(h_graph["Meshing_Dense"]["inputs"]["depthMapsFolder"], "{DepthMapFilter_Dense.output}")
-            self.assertEqual(h_graph["MeshFiltering_Dense"]["inputs"]["inputMesh"], "{Meshing_Dense.outputMesh}")
-            self.assertEqual(h_graph["Texturing_Dense"]["inputs"]["input"], "{Meshing_Dense.output}")
-            self.assertEqual(h_graph["Texturing_Dense"]["inputs"]["imagesFolder"], "{DepthMap_Dense.imagesFolder}")
-            self.assertEqual(h_graph["Texturing_Dense"]["inputs"]["inputMesh"], "{MeshFiltering_Dense.outputMesh}")
-
-            # Verify clean labels & comments on Texturing_Fast and Texturing_Dense
-            for tx_node in ["Texturing_Fast", "Texturing_Dense"]:
-                internal_in = h_graph[tx_node].get("internalInputs", {})
-                self.assertEqual(internal_in.get("label", ""), tx_node)
-
-            # Verify Publish_Comparison gathers all 9 comparison artifacts
-            pub_files = h_graph["Publish_Comparison"]["inputs"]["inputFiles"]
-            for expected_ref in [
-                "{Texturing_Fast.outputMesh}",
-                "{Texturing_Fast.outputMaterial}",
-                "{Texturing_Fast.outputTextures}",
-                "{Texturing_Dense.outputMesh}",
-                "{Texturing_Dense.outputMaterial}",
-                "{Texturing_Dense.outputTextures}",
-                "{GenSfM_1.outputMeshGlb}",
-                "{GenSfM_1.outputGaussianPly}",
-                "{GenSfM_1.outputSfMDataDense}",
-            ]:
-                self.assertIn(expected_ref, pub_files)
-
-        # 4. Validate GenSfM.py and GenSfMRunnerConfig default generateSyntheticViews == 24
+        # 2. Validate GenSfM.py and GenSfMRunnerConfig default generateSyntheticViews == 24
         default_cfg = GenSfMRunnerConfig(input_path="dummy_in", output_dir="dummy_out")
         self.assertEqual(default_cfg.generate_synthetic_views, 24)
         gensfm_py_text = (PLUGIN_ROOT / "meshroom/genSfm/GenSfM.py").read_text(encoding="utf-8")
         self.assertIn('name="generateSyntheticViews"', gensfm_py_text)
         self.assertIn("value=24,", gensfm_py_text)
 
-        # 5. Validate pre-computed Wagon Demo & Hybrid Demo projects in workspace root
-        demo_mg = PLUGIN_ROOT.parent / "mrGenSfM_Wagon_Demo.mg"
-        if demo_mg.is_file():
-            demo_data = json.loads(demo_mg.read_text(encoding="utf-8"))
-            for node_name in [
-                "CameraInit_1",
-                "GenSfM_1",
-                "PrepareDenseScene_1",
-                "MeshFiltering_1",
-                "Texturing_1",
-                "Publish_1",
-            ]:
-                self.assertIn(node_name, demo_data["graph"])
-                self.assertTrue(demo_data["graph"][node_name].get("uid"))
-
-        hybrid_demo_mg = PLUGIN_ROOT.parent / "mrGenSfM_Hybrid_Demo.mg"
-        if hybrid_demo_mg.is_file():
-            hybrid_demo_data = json.loads(hybrid_demo_mg.read_text(encoding="utf-8"))
-            for node_name in [
-                "CameraInit_1",
-                "GenSfM_1",
-                "Publish_Comparison",
-            ]:
-                self.assertIn(node_name, hybrid_demo_data["graph"])
-                self.assertTrue(hybrid_demo_data["graph"][node_name].get("uid"))
+        # 3. Validate clean labels (no parenthesis tags)
+        for output_tag in [
+            'label="SfMData"',
+            'label="Textured Mesh"',
+            'label="Mesh Material"',
+            'label="Mesh Texture"',
+            'label="GLB Mesh"',
+            'label="Gaussian Splats"',
+            'label="Cameras"',
+            'label="Dense SfMData"',
+        ]:
+            self.assertIn(output_tag, gensfm_py_text)
 
 
 if __name__ == "__main__":

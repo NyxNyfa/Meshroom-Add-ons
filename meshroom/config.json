@@ -47,6 +47,6 @@
     {
         "key": "GENSFM_DEFAULT_TEMPLATE",
         "type": "string",
-        "value": "genSfmHybrid"
+        "value": "genSfm"
     }
 ]

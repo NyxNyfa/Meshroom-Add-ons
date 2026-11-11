@@ -43,8 +43,8 @@ publisher = "Meshroom Community"
 requirements = "Cloud API (Any OS/Laptop) or NVIDIA GPU with WSL2/Docker/CUDA 12.0+ for Local mode"
 license = "MPL-2.0"
 category = "Sparse Reconstruction / AI"
-nodes = ["meshroom.genSfm.GenSfM", "meshroom.genSfm.AiRemoveBackground"]
-templates = ["meshroom/genSfm.mg", "meshroom/genSfmHybrid.mg", "meshroom/genSfmDensePhotogrammetry.mg"]
+nodes = ["meshroom.genSfm.GenSfM"]
+templates = ["meshroom/genSfm.mg"]
 
 [tool.meshroom.plugin.env]
 ATTN_BACKEND = "sdpa"
