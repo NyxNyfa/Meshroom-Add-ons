@@ -124,6 +124,7 @@ def convert_cameras_json_to_sfm(
     output_abc_path: Optional[Path] = None,
     mesh_vertices_for_landmarks: Optional[np.ndarray] = None,
     mesh_colors_for_landmarks: Optional[np.ndarray] = None,
+    max_landmarks: int = 0,
     logger: Optional[logging.Logger] = None,
 ) -> Tuple[Path, Optional[Path]]:
     """
@@ -262,10 +263,10 @@ def convert_cameras_json_to_sfm(
         "poses": sfm_poses,
     }
 
-    # Include 3D structure landmarks with multi-view 2D observations so 3D Viewer & Texturing work across all views
-    if mesh_vertices_for_landmarks is not None and len(mesh_vertices_for_landmarks) > 0:
+    # Include 3D structure landmarks only if explicitly requested (max_landmarks > 0).
+    # Default is 0 (no landmarks) to prevent billboard voxel cubes from obscuring the textured mesh.
+    if max_landmarks > 0 and mesh_vertices_for_landmarks is not None and len(mesh_vertices_for_landmarks) > 0:
         pts = np.asarray(mesh_vertices_for_landmarks, dtype=np.float64)
-        max_landmarks = 10000
         step = max(1, len(pts) // max_landmarks)
         sampled = pts[::step][:max_landmarks]
 
@@ -334,6 +335,8 @@ def convert_cameras_json_to_sfm(
                 }
             )
         sfm_doc["structure"] = structure_list
+    else:
+        sfm_doc["structure"] = []
 
     output_sfm_path.write_text(json.dumps(sfm_doc, indent=4), encoding="utf-8")
 
@@ -397,6 +400,7 @@ def synthesize_dense_views_and_sfm(
     output_dir: Path,
     num_synthetic_views: int = 24,
     resolution: int = 518,
+    max_landmarks: int = 0,
     logger: Optional[logging.Logger] = None,
 ) -> Tuple[Path, Optional[Path], List[Path]]:
     """
@@ -487,20 +491,23 @@ def synthesize_dense_views_and_sfm(
     dense_cameras_json = output_dir / "cameras_dense.json"
     dense_cameras_json.write_text(json.dumps(dense_cam_payload, indent=2) + "\n", encoding="utf-8")
 
-    # Sample vertex RGB colors from texture for colored landmarks
-    tex_np = np.asarray(tex_img.convert("RGB"), dtype=np.float32)
-    th, tw, _ = tex_np.shape
-    vu_px = np.clip(np.round(uvs[:, 0] * (tw - 1)).astype(np.int32), 0, tw - 1)
-    vv_px = np.clip(np.round((1.0 - uvs[:, 1]) * (th - 1)).astype(np.int32), 0, th - 1)
-    vert_colors_u8 = tex_np[vv_px, vu_px]
+    vert_colors_u8 = None
+    if max_landmarks > 0:
+        # Sample vertex RGB colors from texture for colored landmarks
+        tex_np = np.asarray(tex_img.convert("RGB"), dtype=np.float32)
+        th, tw, _ = tex_np.shape
+        vu_px = np.clip(np.round(uvs[:, 0] * (tw - 1)).astype(np.int32), 0, tw - 1)
+        vv_px = np.clip(np.round((1.0 - uvs[:, 1]) * (th - 1)).astype(np.int32), 0, th - 1)
+        vert_colors_u8 = tex_np[vv_px, vu_px]
 
     dense_sfm_path, dense_abc_path = convert_cameras_json_to_sfm(
         cameras_json_path=dense_cameras_json,
         views=synth_view_descriptors,
         output_sfm_path=output_dir / "sfmDataDense.sfm",
         output_abc_path=output_dir / "sfmDataDense.abc",
-        mesh_vertices_for_landmarks=vertices_yup,
+        mesh_vertices_for_landmarks=vertices_yup if max_landmarks > 0 else None,
         mesh_colors_for_landmarks=vert_colors_u8,
+        max_landmarks=max_landmarks,
         logger=logger,
     )
     if logger:

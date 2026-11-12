@@ -276,30 +276,14 @@ def run_gensfm_pipeline(
     if config.export_alicevision_sfm and cameras_json_path.is_file():
         import numpy as np
 
-        mesh_verts = None
-        mesh_cols = None
-        try:
-            mesh_verts, _, mesh_uvs, mesh_tex = _parse_glb_native(mesh_glb_path)
-            if mesh_verts is not None and mesh_uvs is not None and mesh_tex is not None:
-                tex_np = np.asarray(mesh_tex.convert("RGB"), dtype=np.float32)
-                th, tw, _ = tex_np.shape
-                vu_px = np.clip(np.round(mesh_uvs[:, 0] * (tw - 1)).astype(np.int32), 0, tw - 1)
-                vv_px = np.clip(np.round((1.0 - mesh_uvs[:, 1]) * (th - 1)).astype(np.int32), 0, th - 1)
-                mesh_cols = tex_np[vv_px, vu_px]
-        except Exception as glb_exc:
-            logger.debug(
-                f"Could not sample GLB vertices/colors for SfM landmarks ({glb_exc}); proceeding without landmarks."
-            )
-            mesh_verts = None
-            mesh_cols = None
-
         sfm_json_path, sfm_abc_path = convert_cameras_json_to_sfm(
             cameras_json_path=cameras_json_path,
             views=selected_views,
             output_sfm_path=output_dir / "sfmData.sfm",
             output_abc_path=output_dir / "sfmData.abc",
-            mesh_vertices_for_landmarks=mesh_verts,
-            mesh_colors_for_landmarks=mesh_cols,
+            mesh_vertices_for_landmarks=None,
+            mesh_colors_for_landmarks=None,
+            max_landmarks=0,
             logger=logger,
         )
 

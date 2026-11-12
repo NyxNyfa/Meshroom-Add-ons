@@ -186,6 +186,10 @@ class TestMrGenSfMPipeline(unittest.TestCase):
         self.assertIn("mtllib test.mtl", obj_text)
         self.assertIn("vt ", obj_text)
         self.assertIn("f 1/1/1", obj_text)
+        mtl_text = mtl_path.read_text(encoding="utf-8")
+        self.assertIn("Ka 0.100000 0.100000 0.100000", mtl_text)
+        self.assertIn("Kd 0.600000 0.600000 0.600000", mtl_text)
+        self.assertIn("illum 1", mtl_text)
 
         ply_path = write_gaussian_ply(
             self.tmp_dir / "gaussian.ply",
@@ -224,6 +228,49 @@ class TestMrGenSfMPipeline(unittest.TestCase):
                 width=1024,
                 height=1024,
             )
+
+        from gensfm_core.masking import ViewDescriptor
+        cam_file = self.tmp_dir / "test_cam.json"
+        cam_file.write_text(
+            json.dumps(
+                {
+                    "extrinsics": [np.eye(4).tolist()],
+                    "intrinsics": [[[1.0, 0.0, 0.5], [0.0, 1.0, 0.5], [0.0, 0.0, 1.0]]],
+                    "data_to_mesh": DEFAULT_DATA_TO_MESH,
+                }
+            ),
+            encoding="utf-8",
+        )
+        dummy_view = ViewDescriptor(
+            view_id="101",
+            pose_id="101",
+            intrinsic_id="101",
+            frame_id=0,
+            image_path=Path("dummy.png"),
+            width=512,
+            height=512,
+        )
+        # Default: max_landmarks=0 -> empty structure
+        sfm_p0, _ = convert_cameras_json_to_sfm(
+            cam_file,
+            [dummy_view],
+            self.tmp_dir / "out0.sfm",
+            mesh_vertices_for_landmarks=np.zeros((10, 3)),
+            max_landmarks=0,
+        )
+        doc0 = json.loads(sfm_p0.read_text(encoding="utf-8"))
+        self.assertEqual(doc0["structure"], [])
+
+        # Explicit: max_landmarks=5 -> 5 structure points
+        sfm_p5, _ = convert_cameras_json_to_sfm(
+            cam_file,
+            [dummy_view],
+            self.tmp_dir / "out5.sfm",
+            mesh_vertices_for_landmarks=np.zeros((10, 3)),
+            max_landmarks=5,
+        )
+        doc5 = json.loads(sfm_p5.read_text(encoding="utf-8"))
+        self.assertEqual(len(doc5["structure"]), 5)
 
     def test_boundary_foreground_padding_and_gemini_schema_mock(self) -> None:
         from unittest.mock import MagicMock, patch
@@ -351,13 +398,13 @@ class TestMrGenSfMPipeline(unittest.TestCase):
         self.assertEqual(len(sfm_data["views"]), 4)
         self.assertEqual(len(sfm_data["poses"]), 4)
         self.assertGreaterEqual(len(sfm_data["intrinsics"]), 1)
-        self.assertGreater(len(sfm_data.get("structure", [])), 2000)
+        # Verify structure is empty so Meshroom 3D viewer doesn't render cluttering billboard voxels over mesh
+        self.assertEqual(len(sfm_data.get("structure", [])), 0)
 
         # Verify 100% outward-pointing triangle normals on reconstructed mesh.glb
         from gensfm_core.mesh_converter import _parse_glb_native
 
         verts_glb, faces_glb, _, _ = _parse_glb_native(result.mesh_glb_path)
-        self.assertEqual(len(sfm_data["structure"]), len(verts_glb))
         v0, v1, v2 = verts_glb[faces_glb[:, 0]], verts_glb[faces_glb[:, 1]], verts_glb[faces_glb[:, 2]]
         face_normals = np.cross(v1 - v0, v2 - v0)
         face_centers = (v0 + v1 + v2) / 3.0
@@ -374,23 +421,10 @@ class TestMrGenSfMPipeline(unittest.TestCase):
             t_expected = np.asarray(cam_json["extrinsics"][idx], dtype=np.float64)[:3, 3]
             np.testing.assert_allclose(t_recovered, t_expected, atol=1e-5)
 
-        # Verify multi-view landmark observations cover all 4 camera viewIds (not just view[0])
-        observed_view_ids = {
-            obs["observationId"]
-            for lm in sfm_data["structure"]
-            for obs in lm.get("observations", [])
-        }
-        self.assertEqual(len(observed_view_ids), 4)
-
         sfm_dense_data = json.loads((out_dir / "sfmDataDense.sfm").read_text(encoding="utf-8"))
         self.assertEqual(len(sfm_dense_data["views"]), 12)
         self.assertEqual(len(sfm_dense_data["poses"]), 12)
-        dense_observed_view_ids = {
-            obs["observationId"]
-            for lm in sfm_dense_data.get("structure", [])
-            for obs in lm.get("observations", [])
-        }
-        self.assertGreaterEqual(len(dense_observed_view_ids), 8)
+        self.assertEqual(len(sfm_dense_data.get("structure", [])), 0)
 
     def test_cloud_api_polling_relative_artifact_and_error_cleanup(self) -> None:
         import io
