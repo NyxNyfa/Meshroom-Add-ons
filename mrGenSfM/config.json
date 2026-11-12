@@ -1,0 +1,11 @@
+{
+    "default_endpoint": "http://127.0.0.1:8000",
+    "default_pretrained_model": "dotblue/GenSfm",
+    "default_llm_provider": "gemini",
+    "default_llm_model": "gemini-3.8-flash",
+    "wsl_distro": "Ubuntu",
+    "wsl_conda_env": "gensfm",
+    "docker_image": "gensfm:cu128",
+    "gensfm_repo_path": "D:/Meshroom/GenSfm",
+    "low_vram_mode": true
+}
