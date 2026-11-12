@@ -287,6 +287,14 @@ def main() -> None:
         )
         pred_x_0 = res.samples
 
+        # Denormalize latents back to feature distribution space (CRITICAL for vibrant texture & appearance)
+        if hasattr(evaluator, "normalization") and evaluator.normalization is not None:
+            pred_x_0 = pred_x_0.replace(pred_x_0.feats * evaluator.std + evaluator.mean)
+        elif "normalization" in options and options["normalization"] is not None:
+            norm_mean = torch.tensor(options["normalization"]["mean"], dtype=torch.float32, device=pred_x_0.device).reshape(1, -1)
+            norm_std = torch.tensor(options["normalization"]["std"], dtype=torch.float32, device=pred_x_0.device).reshape(1, -1)
+            pred_x_0 = pred_x_0.replace(pred_x_0.feats * norm_std + norm_mean)
+
         # Free Stage 2 SLat denoiser (~2.3GB) before running mesh & gaussian decoders
         del evaluator.models["slat_denoiser"]
         gc.collect()

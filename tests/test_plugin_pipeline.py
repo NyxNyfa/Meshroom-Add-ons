@@ -187,8 +187,8 @@ class TestMrGenSfMPipeline(unittest.TestCase):
         self.assertIn("vt ", obj_text)
         self.assertIn("f 1/1/1", obj_text)
         mtl_text = mtl_path.read_text(encoding="utf-8")
-        self.assertIn("Ka 0.100000 0.100000 0.100000", mtl_text)
-        self.assertIn("Kd 0.600000 0.600000 0.600000", mtl_text)
+        self.assertIn("Ka 0.200000 0.200000 0.200000", mtl_text)
+        self.assertIn("Kd 1.000000 1.000000 1.000000", mtl_text)
         self.assertIn("illum 1", mtl_text)
 
         ply_path = write_gaussian_ply(
