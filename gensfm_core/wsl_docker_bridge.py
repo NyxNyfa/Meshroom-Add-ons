@@ -44,6 +44,7 @@ def main() -> None:
     parser.add_argument("--seed", type=int, default=1)
     parser.add_argument("--steps", type=int, default=25)
     parser.add_argument("--low-vram", action="store_true")
+    parser.add_argument("--fast-texture", action="store_true")
     parser.add_argument("--remove-background", action="store_true")
     args = parser.parse_args()
 
@@ -114,6 +115,17 @@ def main() -> None:
         crop_ratio = pipeline.preprocessing["crop_size_ratio"]
         del pipeline
         gc.collect()
+
+    if args.fast_texture:
+        orig_to_glb = pu.to_glb
+        def fast_to_glb(*g_args, **g_kwargs):
+            orig_bake = pu.bake_texture
+            pu.bake_texture = lambda *b_args, **b_kwargs: orig_bake(*b_args, **dict(b_kwargs, mode="fast"))
+            try:
+                return orig_to_glb(*g_args, **g_kwargs)
+            finally:
+                pu.bake_texture = orig_bake
+        pu.to_glb = fast_to_glb
 
     print("[mrGenSfM Low-VRAM] Initializing sequential Stage 1 execution...", flush=True)
     inputs = InputViews(paths, crop_ratio, args.remove_background)
@@ -280,6 +292,7 @@ def run_gensfm_via_wsl(
     seed: int = 1,
     steps: int = 25,
     low_vram_mode: bool = True,
+    optimize_texture: bool = True,
     remove_background: bool = False,
     logger: Optional[logging.Logger] = None,
 ) -> Path:
@@ -312,6 +325,8 @@ def run_gensfm_via_wsl(
         flags += f" --stage2 {shlex.quote(windows_to_wsl_path(stage2_checkpoint.strip()))}"
     if low_vram_mode:
         flags += " --low-vram"
+    if not optimize_texture:
+        flags += " --fast-texture"
     if remove_background:
         flags += " --remove-background"
 
@@ -411,6 +426,7 @@ def run_gensfm_via_docker(
     seed: int = 1,
     steps: int = 25,
     low_vram_mode: bool = True,
+    optimize_texture: bool = True,
     remove_background: bool = False,
     logger: Optional[logging.Logger] = None,
 ) -> Path:
@@ -467,6 +483,8 @@ def run_gensfm_via_docker(
         cmd.extend(["--stage2", stage2_checkpoint.strip()])
     if low_vram_mode:
         cmd.append("--low-vram")
+    if not optimize_texture:
+        cmd.append("--fast-texture")
     if remove_background:
         cmd.append("--remove-background")
 
@@ -492,6 +510,7 @@ def run_gensfm_via_local_venv(
     seed: int = 1,
     steps: int = 25,
     low_vram_mode: bool = True,
+    optimize_texture: bool = True,
     remove_background: bool = False,
     logger: Optional[logging.Logger] = None,
 ) -> Path:
@@ -530,6 +549,8 @@ def run_gensfm_via_local_venv(
         cmd.extend(["--stage2", stage2_checkpoint.strip()])
     if low_vram_mode:
         cmd.append("--low-vram")
+    if not optimize_texture:
+        cmd.append("--fast-texture")
     if remove_background:
         cmd.append("--remove-background")
 

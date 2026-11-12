@@ -57,6 +57,7 @@ class GenSfMRunnerConfig:
     view_selection_mode: str = "all_up_to_4"
     selected_view_indices: str = "0,1,2,3"
     low_vram_mode: bool = True
+    optimize_texture: bool = True
     seed: int = 1
     steps: int = 25
     generate_synthetic_views: int = 24
@@ -210,6 +211,7 @@ def run_gensfm_pipeline(
                 seed=config.seed,
                 steps=config.steps,
                 low_vram_mode=config.low_vram_mode,
+                optimize_texture=config.optimize_texture,
                 remove_background=False,
                 logger=logger,
             )
@@ -223,6 +225,7 @@ def run_gensfm_pipeline(
                 seed=config.seed,
                 steps=config.steps,
                 low_vram_mode=config.low_vram_mode,
+                optimize_texture=config.optimize_texture,
                 remove_background=False,
                 logger=logger,
             )
@@ -253,6 +256,7 @@ def run_gensfm_pipeline(
                 seed=config.seed,
                 steps=config.steps,
                 low_vram_mode=config.low_vram_mode,
+                optimize_texture=config.optimize_texture,
                 remove_background=False,
                 logger=logger,
             )
@@ -335,6 +339,8 @@ def main(argv: Optional[List[str]] = None) -> None:
     parser.add_argument("--view-selection-mode", default="all_up_to_4")
     parser.add_argument("--selected-view-indices", default="0,1,2,3")
     parser.add_argument("--low-vram", action="store_true", default=True)
+    parser.add_argument("--optimize-texture", action="store_true", default=True)
+    parser.add_argument("--fast-texture", dest="optimize_texture", action="store_false")
     parser.add_argument("--seed", type=int, default=1)
     parser.add_argument("--steps", type=int, default=25)
     parser.add_argument("--generate-synthetic-views", type=int, default=24)
@@ -358,6 +364,7 @@ def main(argv: Optional[List[str]] = None) -> None:
         view_selection_mode=args.view_selection_mode,
         selected_view_indices=args.selected_view_indices,
         low_vram_mode=args.low_vram,
+        optimize_texture=args.optimize_texture,
         seed=args.seed,
         steps=args.steps,
         generate_synthetic_views=args.generate_synthetic_views,
