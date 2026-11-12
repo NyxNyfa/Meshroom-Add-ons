@@ -120,6 +120,7 @@ wsl bash /mnt/d/Meshroom/mrGenSfM/docker/wsl_setup_gensfm.sh /mnt/d/Meshroom/Gen
 * `maskingStrategy`: `auto_rembg` (*Default*, automatic U2-Net segmentation), `existing_alpha` (pre-cut PNGs), or `external_masks` (integrated with `mrRemBG`).
 * `executionBackend`: `local_wsl_gpu` (*Default*, native local GPU via WSL2), `local_docker`, or `cloud_api`.
 * `lowVramMode`: `True` (*Default*, enables CPU-GPU offloading for 4GB–8GB GPUs).
+* `optimizeTexture`: `True` (*Default*, enables native neural multi-view texture optimization for crisp, sharp UV maps. If unchecked, uses fast draft inpainting).
 * `seed`: Random seed for deterministic generation (default: `1`).
 * `steps`: Flow-matching denoising steps (default: `25`).
 
@@ -128,12 +129,15 @@ wsl bash /mnt/d/Meshroom/mrGenSfM/docker/wsl_setup_gensfm.sh /mnt/d/Meshroom/Gen
 2. **`GenSfM_RemBG.mg`**: Modular pipeline chained with `mrRemBG` (`CameraInit` $\rightarrow$ `RemBG` $\rightarrow$ `GenSfM` $\rightarrow$ `Publish`).
 
 ### Output Attributes
-* `outputMeshObj`: Textured mesh (`mesh.obj`).
-* `outputMeshMtl`: Material definition (`mesh.mtl`).
-* `outputMeshTexture`: Diffuse texture map (`mesh_texture.png`).
-* `outputMeshGlb`: Standalone binary glTF 2.0 (`mesh.glb`).
-* `outputGaussianPly`: 3D Gaussian Splats (`gaussian.ply`).
-* `outputSfMData`: AliceVision camera intrinsics & sparse landmarks (`sfmData.abc`).
+Streamlined into **5 Primary Outputs** directly visible on the node canvas, with 8 auxiliary files available under Advanced mode:
+* **Primary Pins:**
+  * `outputMeshObj`: Primary textured 3D mesh (`mesh.obj`) for Meshroom 3D Viewer.
+  * `outputSfMData`: AliceVision camera intrinsics & recovered poses (`sfmData.abc`).
+  * `outputMeshGlb`: Standalone binary glTF 2.0 with embedded texture (`mesh.glb`).
+  * `outputGaussianPly`: 3D Gaussian Splats point cloud (`gaussian.ply`).
+  * `outputSfMDataDense`: Enriched multi-view Alembic (`sfmDataDense.abc`) for MVS pipelines.
+* **Advanced / Inspection Pins (`advanced=True`):**
+  * `outputMeshMtl` (`mesh.mtl`), `outputMeshTexture` (`mesh_texture.png`), `outputCamerasJson` (`cameras.json`), `outputMaskedInputs` (`input-rgba-*.png`), `outputReprojections` (`reprojection-*.png`), `outputSfMDataJson` (`sfmData.sfm`), `outputReprojectionByView`, `outputMaskByView`.
 
 ---
 

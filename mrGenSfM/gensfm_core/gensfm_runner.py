@@ -57,6 +57,7 @@ class GenSfMRunnerConfig:
     view_selection_mode: str = "all_up_to_4"
     selected_view_indices: str = "0,1,2,3"
     low_vram_mode: bool = True
+    optimize_texture: bool = True
     seed: int = 1
     steps: int = 25
     generate_synthetic_views: int = 24
@@ -210,6 +211,7 @@ def run_gensfm_pipeline(
                 seed=config.seed,
                 steps=config.steps,
                 low_vram_mode=config.low_vram_mode,
+                optimize_texture=config.optimize_texture,
                 remove_background=False,
                 logger=logger,
             )
@@ -223,6 +225,7 @@ def run_gensfm_pipeline(
                 seed=config.seed,
                 steps=config.steps,
                 low_vram_mode=config.low_vram_mode,
+                optimize_texture=config.optimize_texture,
                 remove_background=False,
                 logger=logger,
             )
@@ -253,6 +256,7 @@ def run_gensfm_pipeline(
                 seed=config.seed,
                 steps=config.steps,
                 low_vram_mode=config.low_vram_mode,
+                optimize_texture=config.optimize_texture,
                 remove_background=False,
                 logger=logger,
             )
@@ -276,30 +280,14 @@ def run_gensfm_pipeline(
     if config.export_alicevision_sfm and cameras_json_path.is_file():
         import numpy as np
 
-        mesh_verts = None
-        mesh_cols = None
-        try:
-            mesh_verts, _, mesh_uvs, mesh_tex = _parse_glb_native(mesh_glb_path)
-            if mesh_verts is not None and mesh_uvs is not None and mesh_tex is not None:
-                tex_np = np.asarray(mesh_tex.convert("RGB"), dtype=np.float32)
-                th, tw, _ = tex_np.shape
-                vu_px = np.clip(np.round(mesh_uvs[:, 0] * (tw - 1)).astype(np.int32), 0, tw - 1)
-                vv_px = np.clip(np.round((1.0 - mesh_uvs[:, 1]) * (th - 1)).astype(np.int32), 0, th - 1)
-                mesh_cols = tex_np[vv_px, vu_px]
-        except Exception as glb_exc:
-            logger.debug(
-                f"Could not sample GLB vertices/colors for SfM landmarks ({glb_exc}); proceeding without landmarks."
-            )
-            mesh_verts = None
-            mesh_cols = None
-
         sfm_json_path, sfm_abc_path = convert_cameras_json_to_sfm(
             cameras_json_path=cameras_json_path,
             views=selected_views,
             output_sfm_path=output_dir / "sfmData.sfm",
             output_abc_path=output_dir / "sfmData.abc",
-            mesh_vertices_for_landmarks=mesh_verts,
-            mesh_colors_for_landmarks=mesh_cols,
+            mesh_vertices_for_landmarks=None,
+            mesh_colors_for_landmarks=None,
+            max_landmarks=0,
             logger=logger,
         )
 
@@ -351,6 +339,8 @@ def main(argv: Optional[List[str]] = None) -> None:
     parser.add_argument("--view-selection-mode", default="all_up_to_4")
     parser.add_argument("--selected-view-indices", default="0,1,2,3")
     parser.add_argument("--low-vram", action="store_true", default=True)
+    parser.add_argument("--optimize-texture", action="store_true", default=True)
+    parser.add_argument("--fast-texture", dest="optimize_texture", action="store_false")
     parser.add_argument("--seed", type=int, default=1)
     parser.add_argument("--steps", type=int, default=25)
     parser.add_argument("--generate-synthetic-views", type=int, default=24)
@@ -374,6 +364,7 @@ def main(argv: Optional[List[str]] = None) -> None:
         view_selection_mode=args.view_selection_mode,
         selected_view_indices=args.selected_view_indices,
         low_vram_mode=args.low_vram,
+        optimize_texture=args.optimize_texture,
         seed=args.seed,
         steps=args.steps,
         generate_synthetic_views=args.generate_synthetic_views,

@@ -44,6 +44,7 @@ def main() -> None:
     parser.add_argument("--seed", type=int, default=1)
     parser.add_argument("--steps", type=int, default=25)
     parser.add_argument("--low-vram", action="store_true")
+    parser.add_argument("--fast-texture", action="store_true")
     parser.add_argument("--remove-background", action="store_true")
     args = parser.parse_args()
 
@@ -115,16 +116,121 @@ def main() -> None:
         del pipeline
         gc.collect()
 
-    # Fast texture baking to prevent rasterization OOM on 4GB VRAM
-    orig_to_glb = pu.to_glb
-    def fast_to_glb(*g_args, **g_kwargs):
-        orig_bake = pu.bake_texture
-        pu.bake_texture = lambda *b_args, **b_kwargs: orig_bake(*b_args, **dict(b_kwargs, mode="fast"))
+    orig_bake = pu.bake_texture
+
+    def low_vram_bake_texture(
+        vertices,
+        faces,
+        uvs,
+        observations,
+        masks,
+        extrinsics,
+        intrinsics,
+        texture_size=1024,
+        near=0.1,
+        far=10.0,
+        mode="opt",
+        lambda_tv=1e-2,
+        verbose=False,
+    ):
+        if mode == "fast" or args.fast_texture:
+            print("[mrGenSfM Low-VRAM] Using fast inpainting texture baking...", flush=True)
+            return orig_bake(
+                vertices, faces, uvs, observations, masks, extrinsics, intrinsics,
+                texture_size=texture_size, near=near, far=far, mode="fast",
+                lambda_tv=lambda_tv, verbose=verbose,
+            )
+
+        print("[mrGenSfM Low-VRAM] Using memory-efficient neural texture optimization (CPU offloaded)...", flush=True)
         try:
-            return orig_to_glb(*g_args, **g_kwargs)
-        finally:
-            pu.bake_texture = orig_bake
-    pu.to_glb = fast_to_glb
+            import nvdiffrast.torch as dr
+            gc.collect()
+            torch.cuda.empty_cache()
+
+            # Keep all multi-view observations & masks in CPU host pinned memory to save ~1.5GB VRAM
+            cpu_obs = [
+                torch.from_numpy(obs).float().div_(255.0).flip(0).pin_memory()
+                for obs in observations
+            ]
+            cpu_masks = [
+                torch.from_numpy(m > 0).bool().flip(0).pin_memory()
+                for m in masks
+            ]
+
+            verts_gpu = torch.tensor(vertices, dtype=torch.float32, device="cuda")
+            faces_gpu = torch.tensor(faces.astype(np.int32), device="cuda")
+            uvs_gpu = torch.tensor(uvs, dtype=torch.float32, device="cuda")
+
+            views = [pu.extrinsics_to_view(torch.tensor(extr, device="cuda")) for extr in extrinsics]
+            projections = [pu.intrinsics_to_perspective(torch.tensor(intr, device="cuda"), near, far) for intr in intrinsics]
+
+            rastctx = pu.RastContext(backend="cuda")
+            _uv = []
+            _uv_dr = []
+            for i in range(len(views)):
+                obs_shape = observations[i].shape
+                with torch.no_grad():
+                    rast = pu.rasterize_triangle_faces(
+                        rastctx, verts_gpu[None], faces_gpu, obs_shape[1], obs_shape[0], uv=uvs_gpu[None], view=views[i], projection=projections[i]
+                    )
+                    # Immediately offload rasterized UV coords to CPU host memory
+                    _uv.append(rast["uv"].detach().cpu().pin_memory())
+                    _uv_dr.append(rast["uv_dr"].detach().cpu().pin_memory())
+                    del rast
+                if i % 10 == 0:
+                    torch.cuda.empty_cache()
+
+            del verts_gpu, faces_gpu, uvs_gpu, views, projections
+            gc.collect()
+            torch.cuda.empty_cache()
+
+            # Neural texture parameter optimization (only 1 view transferred to GPU per step: ~170MB peak VRAM)
+            texture = torch.nn.Parameter(torch.zeros((1, texture_size, texture_size, 3), dtype=torch.float32, device="cuda"))
+            optimizer = torch.optim.Adam([texture], betas=(0.5, 0.9), lr=1e-2)
+
+            def cosine_anealing(opt, step, tot_steps, start_lr, end_lr):
+                return end_lr + 0.5 * (start_lr - end_lr) * (1 + np.cos(np.pi * step / tot_steps))
+
+            def tv_loss(tex):
+                return torch.nn.functional.l1_loss(tex[:, :-1, :, :], tex[:, 1:, :, :]) + \
+                       torch.nn.functional.l1_loss(tex[:, :, :-1, :], tex[:, :, 1:, :])
+
+            total_steps = 2000
+            num_views = len(_uv)
+            print(f"[mrGenSfM Low-VRAM] Optimizing texture across {num_views} multi-view projections (2000 steps)...", flush=True)
+            for step in range(total_steps):
+                optimizer.zero_grad()
+                selected = np.random.randint(0, num_views)
+                uv = _uv[selected].to("cuda", non_blocking=True)
+                uv_dr = _uv_dr[selected].to("cuda", non_blocking=True)
+                obs = cpu_obs[selected].to("cuda", non_blocking=True)
+                m = cpu_masks[selected].to("cuda", non_blocking=True)
+
+                render = dr.texture(texture, uv, uv_dr)[0]
+                loss = torch.nn.functional.l1_loss(render[m], obs[m])
+                if lambda_tv > 0:
+                    loss = loss + lambda_tv * tv_loss(texture)
+                loss.backward()
+                optimizer.step()
+                optimizer.param_groups[0]["lr"] = cosine_anealing(optimizer, step, total_steps, 1e-2, 1e-5)
+
+                if (step + 1) % 500 == 0 or step == total_steps - 1:
+                    print(f"[mrGenSfM Low-VRAM] Neural texture step {step + 1}/{total_steps} - loss: {loss.item():.4f}", flush=True)
+
+            tex_result = np.clip(texture[0].flip(0).detach().cpu().numpy() * 255, 0, 255).astype(np.uint8)
+            print("[mrGenSfM Low-VRAM] Neural texture optimization completed successfully!", flush=True)
+            del _uv, _uv_dr, cpu_obs, cpu_masks, optimizer, texture
+            gc.collect()
+            torch.cuda.empty_cache()
+            return tex_result
+
+        except Exception as exc:
+            import traceback
+            traceback.print_exc()
+            print(f"[mrGenSfM Low-VRAM] FATAL ERROR in neural texture optimization: {exc}", flush=True)
+            raise exc
+
+    pu.bake_texture = low_vram_bake_texture
 
     print("[mrGenSfM Low-VRAM] Initializing sequential Stage 1 execution...", flush=True)
     inputs = InputViews(paths, crop_ratio, args.remove_background)
@@ -180,6 +286,14 @@ def main() -> None:
             verbose=False,
         )
         pred_x_0 = res.samples
+
+        # Denormalize latents back to feature distribution space (CRITICAL for vibrant texture & appearance)
+        if hasattr(evaluator, "normalization") and evaluator.normalization is not None:
+            pred_x_0 = pred_x_0.replace(pred_x_0.feats * evaluator.std + evaluator.mean)
+        elif "normalization" in options and options["normalization"] is not None:
+            norm_mean = torch.tensor(options["normalization"]["mean"], dtype=torch.float32, device=pred_x_0.device).reshape(1, -1)
+            norm_std = torch.tensor(options["normalization"]["std"], dtype=torch.float32, device=pred_x_0.device).reshape(1, -1)
+            pred_x_0 = pred_x_0.replace(pred_x_0.feats * norm_std + norm_mean)
 
         # Free Stage 2 SLat denoiser (~2.3GB) before running mesh & gaussian decoders
         del evaluator.models["slat_denoiser"]
@@ -291,6 +405,7 @@ def run_gensfm_via_wsl(
     seed: int = 1,
     steps: int = 25,
     low_vram_mode: bool = True,
+    optimize_texture: bool = True,
     remove_background: bool = False,
     logger: Optional[logging.Logger] = None,
 ) -> Path:
@@ -323,6 +438,8 @@ def run_gensfm_via_wsl(
         flags += f" --stage2 {shlex.quote(windows_to_wsl_path(stage2_checkpoint.strip()))}"
     if low_vram_mode:
         flags += " --low-vram"
+    if not optimize_texture:
+        flags += " --fast-texture"
     if remove_background:
         flags += " --remove-background"
 
@@ -422,6 +539,7 @@ def run_gensfm_via_docker(
     seed: int = 1,
     steps: int = 25,
     low_vram_mode: bool = True,
+    optimize_texture: bool = True,
     remove_background: bool = False,
     logger: Optional[logging.Logger] = None,
 ) -> Path:
@@ -478,6 +596,8 @@ def run_gensfm_via_docker(
         cmd.extend(["--stage2", stage2_checkpoint.strip()])
     if low_vram_mode:
         cmd.append("--low-vram")
+    if not optimize_texture:
+        cmd.append("--fast-texture")
     if remove_background:
         cmd.append("--remove-background")
 
@@ -503,6 +623,7 @@ def run_gensfm_via_local_venv(
     seed: int = 1,
     steps: int = 25,
     low_vram_mode: bool = True,
+    optimize_texture: bool = True,
     remove_background: bool = False,
     logger: Optional[logging.Logger] = None,
 ) -> Path:
@@ -541,6 +662,8 @@ def run_gensfm_via_local_venv(
         cmd.extend(["--stage2", stage2_checkpoint.strip()])
     if low_vram_mode:
         cmd.append("--low-vram")
+    if not optimize_texture:
+        cmd.append("--fast-texture")
     if remove_background:
         cmd.append("--remove-background")
 

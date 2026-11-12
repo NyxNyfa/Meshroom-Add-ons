@@ -160,6 +160,14 @@ Standard Meshroom pipelines require 30–150+ sequential photos with >60% overla
             value=25,
             range=(10, 100, 1),
         ),
+        desc.BoolParam(
+            name="optimizeTexture",
+            label="Optimize Texture (HQ)",
+            description="Enable full multi-view neural optimization (mode='opt') for sharp, seamless, photorealistic textures.\n"
+                        " - Checked (Default): Multi-view neural optimization across 100 orbital views for production-quality textures.\n"
+                        " - Unchecked: Fast draft texture rasterization (mode='fast') for rapid prototyping (~5 secs).",
+            value=True,
+        ),
         desc.IntParam(
             name="generateSyntheticViews",
             label="Generate Synthetic Views",
@@ -235,14 +243,6 @@ Standard Meshroom pipelines require 30–150+ sequential photos with >60% overla
 
     outputs = [
         desc.File(
-            name="outputSfMData",
-            label="SfMData",
-            description="Primary sparse SfM output: camera intrinsics, predicted extrinsic poses, and colored sparse point cloud in AliceVision SfMData (.abc) format.",
-            semantic="3d",
-            value="{nodeCacheFolder}/sfmData.abc",
-            group="",
-        ),
-        desc.File(
             name="outputMeshObj",
             label="Textured Mesh",
             description="Textured 3D mesh (.obj + .mtl + mesh_texture.png) in AliceVision coordinate system, ready for 3D Viewer, MeshFiltering, or Texturing.",
@@ -251,18 +251,11 @@ Standard Meshroom pipelines require 30–150+ sequential photos with >60% overla
             group="",
         ),
         desc.File(
-            name="outputMeshMtl",
-            label="Mesh Material",
-            description="Wavefront material definition linking mesh.obj to mesh_texture.png.",
-            value="{nodeCacheFolder}/mesh.mtl",
-            group="",
-        ),
-        desc.File(
-            name="outputMeshTexture",
-            label="Mesh Texture",
-            description="360-degree diffuse texture map for mesh.obj.",
-            semantic="image",
-            value="{nodeCacheFolder}/mesh_texture.png",
+            name="outputSfMData",
+            label="SfMData",
+            description="Primary sparse SfM output: camera intrinsics and predicted extrinsic poses in AliceVision SfMData (.abc) format.",
+            semantic="3d",
+            value="{nodeCacheFolder}/sfmData.abc",
             group="",
         ),
         desc.File(
@@ -280,11 +273,36 @@ Standard Meshroom pipelines require 30–150+ sequential photos with >60% overla
             group="",
         ),
         desc.File(
+            name="outputSfMDataDense",
+            label="Dense SfMData",
+            description="Enriched SfMData (.abc) containing the original views plus synthetic 360-degree orbital multi-view renders for PrepareDenseScene and full MVS photogrammetry.",
+            value="{nodeCacheFolder}/sfmDataDense.abc",
+            group="",
+        ),
+        desc.File(
+            name="outputMeshMtl",
+            label="Mesh Material",
+            description="Wavefront material definition linking mesh.obj to mesh_texture.png.",
+            value="{nodeCacheFolder}/mesh.mtl",
+            group="",
+            advanced=True,
+        ),
+        desc.File(
+            name="outputMeshTexture",
+            label="Mesh Texture",
+            description="360-degree diffuse texture map for mesh.obj.",
+            semantic="image",
+            value="{nodeCacheFolder}/mesh_texture.png",
+            group="",
+            advanced=True,
+        ),
+        desc.File(
             name="outputCamerasJson",
             label="Cameras",
             description="Predicted camera extrinsics, normalized intrinsics, and data_to_mesh matrix from GenSfM.",
             value="{nodeCacheFolder}/cameras.json",
             group="",
+            advanced=True,
         ),
         desc.File(
             name="outputMaskedInputs",
@@ -293,6 +311,7 @@ Standard Meshroom pipelines require 30–150+ sequential photos with >60% overla
             semantic="imageList",
             value="{nodeCacheFolder}/input-rgba-*.png",
             group="",
+            advanced=True,
         ),
         desc.File(
             name="outputReprojections",
@@ -301,14 +320,7 @@ Standard Meshroom pipelines require 30–150+ sequential photos with >60% overla
             semantic="imageList",
             value="{nodeCacheFolder}/reprojection-*.png",
             group="",
-        ),
-        desc.File(
-            name="outputSfMDataDense",
-            label="Dense SfMData",
-            description="Enriched SfMData (.abc) containing the original views plus synthetic 360-degree orbital multi-view renders for PrepareDenseScene and full MVS photogrammetry.",
-            semantic="3d",
-            value="{nodeCacheFolder}/sfmDataDense.abc",
-            group="",
+            advanced=True,
         ),
         desc.File(
             name="outputSfMDataJson",
@@ -316,6 +328,7 @@ Standard Meshroom pipelines require 30–150+ sequential photos with >60% overla
             description="Recovered camera poses and intrinsics in AliceVision JSON (.sfm) format for downstream nodes.",
             value="{nodeCacheFolder}/sfmData.sfm",
             group="",
+            advanced=True,
         ),
         desc.File(
             name="outputReprojectionByView",
@@ -324,6 +337,7 @@ Standard Meshroom pipelines require 30–150+ sequential photos with >60% overla
             semantic="image",
             value="{nodeCacheFolder}/reprojection_<VIEW_ID>.png",
             group="",
+            advanced=True,
         ),
         desc.File(
             name="outputMaskByView",
@@ -332,6 +346,7 @@ Standard Meshroom pipelines require 30–150+ sequential photos with >60% overla
             semantic="image",
             value="{nodeCacheFolder}/mask_<VIEW_ID>.png",
             group="",
+            advanced=True,
         ),
     ]
 
@@ -373,6 +388,7 @@ Standard Meshroom pipelines require 30–150+ sequential photos with >60% overla
                 low_vram_mode=bool(chunk.node.lowVramMode.value),
                 seed=int(chunk.node.seed.value),
                 steps=int(chunk.node.steps.value),
+                optimize_texture=bool(chunk.node.optimizeTexture.value),
                 generate_synthetic_views=int(chunk.node.generateSyntheticViews.value),
                 cloud_endpoint_url=str(chunk.node.cloudEndpoint.value or ""),
                 cloud_api_key=str(chunk.node.cloudApiKey.value or ""),
