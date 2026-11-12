@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mrAIGen3D"
+version = "1.0.0"
+description = "Single-Image AI 3D Reconstruction & Gaussian Splatting Plugin for AliceVision Meshroom (Powered by Stability AI & VAST-AI)"
+readme = "README.md"
+license = { text = "MPL-2.0" }
+requires-python = ">=3.10"
+authors = [
+    { name = "MeshroomHub & mrAIGen3D Contributors" }
+]
+keywords = ["meshroom", "alicevision", "triposr", "triposplat", "image-to-3d", "gaussian-splatting", "stabilityai"]
+dependencies = [
+    "numpy>=1.24.0",
+    "Pillow>=9.5.0",
+    "requests>=2.28.0",
+    "trimesh>=4.0.0",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["meshroom*", "mrai3d_core*", "cli*"]
+
+[tool.meshroom.plugin]
+name = "mrAIGen3D"
+version = "1.0.0"
+publisher = "Meshroom Community"
+requirements = "NVIDIA RTX 3050 Laptop GPU (4GB VRAM) via WSL2 or Remote Colab GPU Worker"
+license = "MPL-2.0"
+category = "AI Generation / 3D Reconstruction"
+nodes = ["meshroom.aiGen3D.AI3DGenerator"]
+templates = ["pipelines/SingleImageAI3D_Clean.mg", "pipelines/SingleImageAI3D_Direct.mg"]
+
