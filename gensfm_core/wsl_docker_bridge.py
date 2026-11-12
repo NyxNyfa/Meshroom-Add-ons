@@ -115,17 +115,6 @@ def main() -> None:
         del pipeline
         gc.collect()
 
-    # Fast texture baking to prevent rasterization OOM on 4GB VRAM
-    orig_to_glb = pu.to_glb
-    def fast_to_glb(*g_args, **g_kwargs):
-        orig_bake = pu.bake_texture
-        pu.bake_texture = lambda *b_args, **b_kwargs: orig_bake(*b_args, **dict(b_kwargs, mode="fast"))
-        try:
-            return orig_to_glb(*g_args, **g_kwargs)
-        finally:
-            pu.bake_texture = orig_bake
-    pu.to_glb = fast_to_glb
-
     print("[mrGenSfM Low-VRAM] Initializing sequential Stage 1 execution...", flush=True)
     inputs = InputViews(paths, crop_ratio, args.remove_background)
     runtime_dir = output_dir / "_runtime_lowvram"

@@ -306,7 +306,6 @@ Standard Meshroom pipelines require 30–150+ sequential photos with >60% overla
             name="outputSfMDataDense",
             label="Dense SfMData",
             description="Enriched SfMData (.abc) containing the original views plus synthetic 360-degree orbital multi-view renders for PrepareDenseScene and full MVS photogrammetry.",
-            semantic="3d",
             value="{nodeCacheFolder}/sfmDataDense.abc",
             group="",
         ),
