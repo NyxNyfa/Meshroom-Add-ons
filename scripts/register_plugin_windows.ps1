@@ -29,7 +29,7 @@ if (Test-Path $TargetLink) {
 
 $ShareMeshroomDir = Join-Path $MeshroomRoot "aliceVision\share\meshroom"
 if (Test-Path $ShareMeshroomDir) {
-    Get-ChildItem -Path (Join-Path $PluginSource "meshroom") -Filter "genSfm*.mg" | ForEach-Object {
+    Get-ChildItem -Path (Join-Path $PluginSource "meshroom") -Filter "*.mg" | ForEach-Object {
         Copy-Item $_.FullName -Destination (Join-Path $ShareMeshroomDir $_.Name) -Force
         Write-Host "[mrGenSfM] Registered pipeline template: $($_.Name)" -ForegroundColor Cyan
     }
