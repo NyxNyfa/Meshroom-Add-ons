@@ -67,8 +67,7 @@ GPU kelas laptop dengan VRAM 4 GB umumnya mengalami galat *CUDA Out of Memory (O
 
 | Nama Parameter | Tipe Data | Nilai Default | Pilihan / Rentang | Penjelasan Fungsional |
 | :--- | :--- | :--- | :--- | :--- |
-| `input` | `desc.File` | `""` | Path berkas | Koneksi utama dari `RemBG.outputSfm` atau `CameraInit.output` (`cameraInit.sfm`). |
-| `overrideImagePath` | `desc.File` | `""` | Path berkas | Opsi memilih file gambar langsung (`.png`/`.jpg`) tanpa melalui node SfM. |
+| `input` | `desc.File` | `""` | Path berkas | **Single Unified Input**: Menerima koneksi `RemBG.outputSfm`, `CameraInit.output` (`cameraInit.sfm`), folder gambar, atau file gambar individual (`.png`/`.jpg`). |
 | `selectedViewIndex` | `desc.IntParam` | `0` | `0` – `1000` | Indeks gambar yang dipilih jika input memuat lebih dari satu foto. |
 | `modelName` | `desc.ChoiceParam` | `"triposr"` | `["triposr", "triposplat", "stable-fast-3d", "spar3d", "trellis-large", "trellis-2-4b", "hunyuan3d-2.1"]` | Model rekonstruksi 3D. `triposr` dan `triposplat` berjalan lokal; sisanya memerlukan worker Colab. |
 | `executionBackend` | `desc.ChoiceParam` | `"local_wsl_gpu"` | `["local_wsl_gpu", "local_cpu", "colab_remote"]` | Lokasi komputasi inferensi model. |
@@ -78,6 +77,10 @@ GPU kelas laptop dengan VRAM 4 GB umumnya mengalami galat *CUDA Out of Memory (O
 | `numGaussians` | `desc.ChoiceParam` | `"131072"` | `["32768", "65536", "131072", "262144"]` | Jumlah titik Gaussian pada model `triposplat`. |
 | `textureResolution` | `desc.ChoiceParam` | `"1024"` | `["512", "1024", "2048"]` | Resolusi peta tekstur dalam piksel. |
 | `lowVramMode` | `desc.BoolParam` | `True` | `True` / `False` | Mengaktifkan strategi sequential layer unloading pada GPU. |
+
+> [!TIP]
+> **Deteksi Transparansi Cerdas (Non-Blocking):**  
+> `AI3DGenerator` secara otomatis mendeteksi apakah gambar input memiliki kanal alfa (RGBA transparan). Jika gambar masih memiliki latar belakang padat (opaque RGB), node **tidak akan crash/berhenti**, melainkan tetap memproses gambar dan menampilkan panduan informatif di log Meshroom agar pengguna mempertimbangkan menghubungkan node `RemBG` di depan `AI3DGenerator` untuk hasil geometri optimal.
 
 ### 3.2 Atribut Output (`outputs`)
 
@@ -90,29 +93,21 @@ GPU kelas laptop dengan VRAM 4 GB umumnya mengalami galat *CUDA Out of Memory (O
 
 ---
 
-## 4. Topologi Pipeline Bawaan
+## 4. Topologi Pipeline Bawaan: `AIGen3D.mg`
 
-### 4.1 Template Rekomendasi: `SingleImageAI3D_Clean.mg`
-Menggabungkan rekonstruksi AI cepat dengan node pembersih geometri bawaan AliceVision:
+Template pipeline resmi **`AIGen3D.mg`** dirancang khusus untuk mengubah 1 foto 2D menjadi model 3D penuh secara instan dan bersih:
+
 ```mermaid
 flowchart LR
-    CI["CameraInit\n(1 Foto)"] --> RBG["RemBG\n(Pad 1:1)"]
-    RBG --> AI["AI3DGenerator\n(TripoSR Lokal)"]
-    AI -- "outputMeshObj" --> MF["MeshFiltering\n(Laplacian Smoothing)"]
-    MF --> MD["MeshDecimate\n(Optimasi Poligon)"]
-    MD --> PUB["Publish_Outputs\n(OBJ + GLB)"]
+    CI["CameraInit\n(1 Foto Objek)"] --> RBG["RemBG\n(Pad 1:1 Transparan)"]
+    RBG --> AI["AI3DGenerator\n(TripoSR / TripoSplat)"]
+    AI --> PUB["Publish_Outputs\n(OBJ + GLB + PLY)"]
 ```
-*Manfaat:*
-- Menghilangkan poligon melayang (*floating artifacts*) khas rekonstruksi marching cubes.
-- Menghaluskan permukaan mesh (*Laplacian smoothing*).
-- Menurunkan ukuran berkas mesh hingga 50% untuk kebutuhan game engine (Unity / Unreal Engine).
 
-### 4.2 Template Cepat: `SingleImageAI3D_Direct.mg`
-Mengekspor langsung hasil generasi mentah tanpa tahapan smoothing:
-```mermaid
-flowchart LR
-    CI["CameraInit"] --> RBG["RemBG"] --> AI["AI3DGenerator"] --> PUB["Publish_Outputs"]
-```
+### Keunggulan Alur `AIGen3D.mg`:
+1. **Otomatis Bersih (Zero-Clutter):** Node `RemBG` otomatis memotong latar belakang dan menambahkan padding 1:1 simetris sehingga input yang masuk ke AI 3D bebas dari artefak latar belakang (*bounding box distortion*).
+2. **Generasi Kilat (~4 Detik):** Memanfaatkan arsitektur NeRF transformer lokal pada GPU RTX 3050 Laptop (4GB VRAM).
+3. **Format Aset Komplit:** Mengekspor langsung Wavefront `.obj` (langsung render di 3D Viewport), glTF `.glb` (PBR texturing lengkap), dan 3D Gaussian Splats `.ply`.
 
 ---
 
@@ -121,7 +116,7 @@ flowchart LR
 1. **Jalankan AliceVision Meshroom**:
    Buka `D:\Meshroom\Meshroom-2025.1.0\Meshroom.exe`.
 2. **Buka Template Pipeline**:
-   Pilih menu bar **Pipelines** $\rightarrow$ **SingleImageAI3D_Clean** (atau **SingleImageAI3D_Direct**).
+   Pilih menu bar **Pipelines** $\rightarrow$ **AIGen3D**.
 3. **Impor Satu Gambar**:
    *Drag-and-drop* satu foto objek (misalnya `D:\Meshroom\griffin\1.png`) ke panel **Images**.
 4. **Pilih Parameter**:
