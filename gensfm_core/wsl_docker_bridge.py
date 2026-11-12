@@ -197,6 +197,7 @@ def main() -> None:
 
             total_steps = 2000
             num_views = len(_uv)
+            print(f"[mrGenSfM Low-VRAM] Optimizing texture across {num_views} multi-view projections (2000 steps)...", flush=True)
             for step in range(total_steps):
                 optimizer.zero_grad()
                 selected = np.random.randint(0, num_views)
@@ -213,21 +214,21 @@ def main() -> None:
                 optimizer.step()
                 optimizer.param_groups[0]["lr"] = cosine_anealing(optimizer, step, total_steps, 1e-2, 1e-5)
 
+                if (step + 1) % 500 == 0 or step == total_steps - 1:
+                    print(f"[mrGenSfM Low-VRAM] Neural texture step {step + 1}/{total_steps} - loss: {loss.item():.4f}", flush=True)
+
             tex_result = np.clip(texture[0].flip(0).detach().cpu().numpy() * 255, 0, 255).astype(np.uint8)
+            print("[mrGenSfM Low-VRAM] Neural texture optimization completed successfully!", flush=True)
             del _uv, _uv_dr, cpu_obs, cpu_masks, optimizer, texture
             gc.collect()
             torch.cuda.empty_cache()
             return tex_result
 
         except Exception as exc:
-            print(f"[mrGenSfM Low-VRAM] Warning: Neural texture optimization failed ({exc}). Falling back to fast inpainting...", flush=True)
-            gc.collect()
-            torch.cuda.empty_cache()
-            return orig_bake(
-                vertices, faces, uvs, observations, masks, extrinsics, intrinsics,
-                texture_size=texture_size, near=near, far=far, mode="fast",
-                lambda_tv=lambda_tv, verbose=verbose,
-            )
+            import traceback
+            traceback.print_exc()
+            print(f"[mrGenSfM Low-VRAM] FATAL ERROR in neural texture optimization: {exc}", flush=True)
+            raise exc
 
     pu.bake_texture = low_vram_bake_texture
 
