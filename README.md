@@ -115,12 +115,18 @@ wsl bash /mnt/d/Meshroom/mrGenSfM/docker/wsl_setup_gensfm.sh /mnt/d/Meshroom/Gen
 ## Node Reference: `GenSfM`
 
 ### Key Parameters
-* `input`: Input SfMData connection from `CameraInit`.
-* `maskingStrategy`: `auto_rembg` (*Default*, automatic U2-Net segmentation), `existing_alpha`, or `external_masks`.
+* `input`: Input SfMData connection from `CameraInit` or `RemBG.outputSfm`.
+* `inputMasks`: Path to external masks folder when using `RemBG.outputMasks`.
+* `maskingStrategy`: `auto_rembg` (*Default*, automatic U2-Net segmentation), `existing_alpha` (pre-cut PNGs), or `external_masks` (integrated with `mrRemBG`).
 * `executionBackend`: `local_wsl_gpu` (*Default*, native local GPU via WSL2), `local_docker`, or `cloud_api`.
 * `lowVramMode`: `True` (*Default*, enables CPU-GPU offloading for 4GB–8GB GPUs).
 * `seed`: Random seed for deterministic generation (default: `1`).
 * `steps`: Flow-matching denoising steps (default: `25`).
+
+### Official Pipeline Templates
+1. **`genSfm.mg`**: Standard all-in-one AI reconstruction (`CameraInit` $\rightarrow$ `GenSfM` $\rightarrow$ `Publish`).
+2. **`GenSfM_RemBG.mg`**: Modular pipeline chained with `mrRemBG` (`CameraInit` $\rightarrow$ `RemBG` $\rightarrow$ `GenSfM` $\rightarrow$ `Publish`).
+3. **`genSfmHybrid.mg`**: Dual-branch fast polish + classic dense MVS photogrammetry.
 
 ### Output Attributes
 * `outputMeshObj`: Textured mesh (`mesh.obj`).
