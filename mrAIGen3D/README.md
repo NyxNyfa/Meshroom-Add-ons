@@ -62,7 +62,7 @@ powershell -ExecutionPolicy Bypass -File D:\Meshroom\mrAIGen3D\scripts\register_
 ```
 This registers:
 - Plugin junction: `D:\Meshroom\Meshroom-2025.1.0\plugins\mrAIGen3D`.
-- Pipeline templates: `AI3D_Clean.mg` and `AI3D_Direct.mg` into `aliceVision\share\meshroom`.
+- Pipeline template: `AIGen3D.mg` into `aliceVision\share\meshroom`.
 
 ---
 
@@ -95,14 +95,11 @@ This registers:
 
 ---
 
-## 6. Pipeline Templates
+## 6. Pipeline Template
 
-1. **`AI3D_Clean.mg` (Recommended):**
-   `CameraInit` $\rightarrow$ `RemBG` $\rightarrow$ `AI3DGenerator` $\rightarrow$ `MeshFiltering` $\rightarrow$ `MeshDecimate` $\rightarrow$ `Publish`.
-   *Smooths marching cubes stepped surfaces, removes floating island polygons, and simplifies topology.*
-2. **`AI3D_Direct.mg`:**
-   `CameraInit` $\rightarrow$ `RemBG` $\rightarrow$ `AI3DGenerator` $\rightarrow$ `Publish`.
-   *Fast direct export.*
+**`AIGen3D.mg`**:
+`CameraInit` (1 Photo) $\rightarrow$ `RemBG` (Pad 1:1) $\rightarrow$ `AI3DGenerator` (TripoSR / TripoSplat) $\rightarrow$ `Publish`.  
+*Automates background matting, feed-forward 3D neural reconstruction in ~4 seconds, and exports OBJ, GLB, and PLY.*
 
 ---
 

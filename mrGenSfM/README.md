@@ -124,9 +124,8 @@ wsl bash /mnt/d/Meshroom/mrGenSfM/docker/wsl_setup_gensfm.sh /mnt/d/Meshroom/Gen
 * `steps`: Flow-matching denoising steps (default: `25`).
 
 ### Official Pipeline Templates
-1. **`genSfm.mg`**: Standard all-in-one AI reconstruction (`CameraInit` $\rightarrow$ `GenSfM` $\rightarrow$ `Publish`).
+1. **`GenSfM.mg`**: Standard all-in-one AI reconstruction (`CameraInit` $\rightarrow$ `GenSfM` $\rightarrow$ `Publish`).
 2. **`GenSfM_RemBG.mg`**: Modular pipeline chained with `mrRemBG` (`CameraInit` $\rightarrow$ `RemBG` $\rightarrow$ `GenSfM` $\rightarrow$ `Publish`).
-3. **`genSfmHybrid.mg`**: Dual-branch fast polish + classic dense MVS photogrammetry.
 
 ### Output Attributes
 * `outputMeshObj`: Textured mesh (`mesh.obj`).

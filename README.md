@@ -99,10 +99,18 @@ The script automatically:
 
 Launch Meshroom and select any template from the **Pipelines** menu:
 
-1. **`RemBG.mg`**: Standalone foreground segmentation (`CameraInit` $\rightarrow$ `RemBG` $\rightarrow$ `Publish`).
-2. **`AI3D_Clean.mg`**: High-quality single-image 3D generation with Laplacian smoothing & decimation (`CameraInit` $\rightarrow$ `RemBG` $\rightarrow$ `AI3DGenerator` $\rightarrow$ `MeshFiltering` $\rightarrow$ `MeshDecimate` $\rightarrow$ `Publish`).
-3. **`AI3D_Direct.mg`**: Instant single-image 3D mesh export (`CameraInit` $\rightarrow$ `RemBG` $\rightarrow$ `AI3DGenerator` $\rightarrow$ `Publish`).
-4. **`GenSfM_RemBG.mg`**: Multi-view 3D reconstruction chaining RemBG masks into GenSfM (`CameraInit` $\rightarrow$ `RemBG` $\rightarrow$ `GenSfM` $\rightarrow$ `Publish`).
+1. **`RemBG.mg`** *(Background Removal Only)*:
+   `CameraInit` $\rightarrow$ `RemBG` $\rightarrow$ `Publish`.  
+   *Isolates foreground and exports transparent RGBA PNGs + binary masks for 1 or more photos.*
+2. **`AIGen3D.mg`** *(Single-Image Generative 3D)*:
+   `CameraInit` (1 Photo) $\rightarrow$ `RemBG` (Pad 1:1) $\rightarrow$ `AI3DGenerator` $\rightarrow$ `Publish`.  
+   *Instant 3D reconstruction in ~4 seconds on local laptop GPU (RTX 3050 4GB). Exports OBJ, GLB, and PLY.*
+3. **`GenSfM.mg`** *(Multi-View 3D Diffusion)*:
+   `CameraInit` (2–4 Photos) $\rightarrow$ `GenSfM` (auto_rembg) $\rightarrow$ `Publish`.  
+   *All-in-one multi-view AI reconstruction with built-in background segmentation.*
+4. **`GenSfM_RemBG.mg`** *(Multi-View with Precision Matting)*:
+   `CameraInit` (2–4 Photos) $\rightarrow$ `RemBG` $\rightarrow$ `GenSfM` (external_masks) $\rightarrow$ `Publish`.  
+   *Chains RemBG's fine morphological alpha masks into GenSfM for razor-sharp geometric silhouettes.*
 
 ---
 

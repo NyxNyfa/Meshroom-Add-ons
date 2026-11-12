@@ -50,12 +50,13 @@ foreach ($plugin in $Plugins) {
         Write-Host "    Created plugin junction: $targetJunction -> $pSrc" -ForegroundColor Green
     }
 
-    # Copy pipeline templates (.mg)
-    $pipelinesDir = Join-Path $pSrc "pipelines"
-    if (Test-Path $pipelinesDir) {
-        Get-ChildItem -Path $pipelinesDir -Filter "*.mg" | ForEach-Object {
-            Copy-Item $_.FullName -Destination (Join-Path $ShareMeshroomDir $_.Name) -Force
-            Write-Host "    Installed pipeline template: $($_.Name)" -ForegroundColor Cyan
+    # Copy pipeline templates (.mg) from pipelines/ and meshroom/
+    @((Join-Path $pSrc "pipelines"), (Join-Path $pSrc "meshroom")) | ForEach-Object {
+        if (Test-Path $_) {
+            Get-ChildItem -Path $_ -Filter "*.mg" | ForEach-Object {
+                Copy-Item $_.FullName -Destination (Join-Path $ShareMeshroomDir $_.Name) -Force
+                Write-Host "    Installed pipeline template: $($_.Name)" -ForegroundColor Cyan
+            }
         }
     }
 }
