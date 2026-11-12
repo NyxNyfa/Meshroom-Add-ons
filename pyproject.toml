@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mrRemBG"
+version = "1.0.0"
+description = "AI-Powered Automatic Background Removal & Alpha Matting Plugin for AliceVision Meshroom"
+readme = "README.md"
+license = { text = "MPL-2.0" }
+requires-python = ">=3.10"
+authors = [
+    { name = "MeshroomHub & mrRemBG Contributors" }
+]
+keywords = ["meshroom", "alicevision", "rembg", "background-removal", "matting", "u2net", "segmentation"]
+dependencies = [
+    "numpy>=1.24.0",
+    "Pillow>=9.5.0",
+    "rembg>=2.0.50",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["meshroom*", "rembg_core*", "cli*"]
+
+[tool.meshroom.plugin]
+name = "mrRemBG"
+version = "1.0.0"
+publisher = "Meshroom Community"
+requirements = "WSL2 Ubuntu GPU or Python with rembg/onnxruntime"
+license = "MPL-2.0"
+category = "AI Generation / Segmentation"
+nodes = ["meshroom.rembg.RemBG"]
+templates = ["pipelines/RemBGPipeline.mg", "pipelines/GenSfM_With_RemBG.mg"]
+

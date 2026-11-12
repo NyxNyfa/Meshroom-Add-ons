@@ -1,0 +1,18 @@
+[
+    {
+        "key": "REMBG_DEFAULT_MODEL",
+        "type": "string",
+        "value": "u2net"
+    },
+    {
+        "key": "REMBG_WSL_DISTRO",
+        "type": "string",
+        "value": "Ubuntu"
+    },
+    {
+        "key": "REMBG_WSL_CONDA_ENV",
+        "type": "string",
+        "value": "gensfm"
+    }
+]
+
