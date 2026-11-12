@@ -95,7 +95,7 @@ Analisis teknis dan langkah mitigasi yang tertanam di `mrGenSfM`:
 ## 5. Panduan Eksekusi Langkah demi Langkah (GUI Meshroom)
 
 1. Buka Meshroom (`D:\Meshroom\Meshroom-2025.1.0\Meshroom.exe`).
-2. Muat template: **Pipelines** $\rightarrow$ **GenSfM_With_RemBG**.
+2. Muat template: **Pipelines** $\rightarrow$ **GenSfM_RemBG** (atau **GenSfM**).
 3. Tarik 2 hingga 4 foto objek dari sudut acak ke panel **Images**.
 4. Klik **Compute**.
 5. Setelah node `GenSfM_1` berstatus hijau (*Success*), **klik dua kali** node tersebut untuk merender objek 3D di layar **3D Viewport**.
