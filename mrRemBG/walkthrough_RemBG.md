@@ -48,8 +48,7 @@ Berikut adalah rincian seluruh parameter input dan output pada antarmuka Meshroo
 
 | Nama Parameter | Tipe Data | Nilai Default | Pilihan / Rentang | Penjelasan Fungsional |
 | :--- | :--- | :--- | :--- | :--- |
-| `input` | `desc.File` | `""` | Path berkas / folder | Koneksi utama dari `CameraInit.output` (`cameraInit.sfm`), direktori gambar, atau file gambar individual. |
-| `overrideImagePath` | `desc.File` | `""` | Path berkas | Opsi bypass manual. Jika diisi, node memproses file gambar ini secara independen. |
+| `input` | `desc.File` | `""` | Path berkas / folder | **Single Unified Input**: Menerima koneksi `CameraInit.output` (`cameraInit.sfm`), direktori folder gambar, atau file gambar individual (`.png`, `.jpg`, `.webp`, `.bmp`). |
 | `model` | `desc.ChoiceParam` | `"u2net"` | `["u2net", "u2netp", "isnet-general-use", "birefnet-general"]` | Arsitektur neural network untuk segmentasi foreground. `u2net` untuk akurasi umum; `u2netp` untuk kecepatan tinggi; `isnet` untuk boundary tajam. |
 | `alphaMatting` | `desc.BoolParam` | `False` | `True` / `False` | Mengaktifkan estimasi trimap dan guided filter matting untuk menghaluskan tepian rambut, bulu halus, dan objek semi-transparan. |
 | `alphaMattingForegroundThreshold` | `desc.IntParam` | `240` | `0` – `255` | Nilai ambang batas piksel pasti foreground pada trimap. |
@@ -75,7 +74,7 @@ Berikut adalah rincian seluruh parameter input dan output pada antarmuka Meshroo
 
 Plugin `mrRemBG` menyertakan 2 template pipeline bawaan yang dapat langsung dibuka dari menu **Pipelines** di Meshroom:
 
-### 3.1 Template 1: `RemBGPipeline.mg` (Segmentasi Mandiri)
+### 3.1 Template 1: `RemBG.mg` (Segmentasi Mandiri)
 Digunakan untuk mengekstrak foreground dari sekumpulan foto objek dan mengekspor hasilnya ke direktori proyek:
 ```mermaid
 flowchart LR
@@ -83,7 +82,7 @@ flowchart LR
     RBG --> PUB["Publish_Outputs\n(Simpan RGBA, SFM, Mask)"]
 ```
 
-### 3.2 Template 2: `GenSfM_With_RemBG.mg` (Integrasi Fotogrametri AI)
+### 3.2 Template 2: `GenSfM_RemBG.mg` (Integrasi Fotogrametri AI)
 Menghubungkan `RemBG` ke node rekonstruksi 3D sparse `GenSfM`. Dengan topologi ini, segmentasi dilakukan di tahap awal dengan presisi tinggi, dan mask grayscale dioperkan langsung ke `GenSfM`:
 ```mermaid
 flowchart LR
@@ -103,11 +102,12 @@ flowchart LR
 1. **Jalankan AliceVision Meshroom**:
    Buka `D:\Meshroom\Meshroom-2025.1.0\Meshroom.exe`.
 2. **Buka Template Pipeline**:
-   Pilih menu bar **Pipelines** $\rightarrow$ **RemBGPipeline** (atau **GenSfM_With_RemBG**).
+   Pilih menu bar **Pipelines** $\rightarrow$ **RemBG** (atau **GenSfM_RemBG**).
 3. **Impor Gambar**:
    *Drag-and-drop* satu atau beberapa foto objek (contoh dari `D:\Meshroom\griffin\*.png`) ke panel **Images**.
 4. **Konfigurasi Parameter `RemBG`**:
    - Klik node `RemBG_1` pada **Graph Editor**.
+   - Input slot `input` secara otomatis terhubung dari `CameraInit.output`. Jika ingin memproses file gambar tunggal secara langsung, Anda cukup mengisi path gambar pada kolom `input`.
    - Jika foto memiliki helai rambut halus atau bulu, aktifkan `alphaMatting: True`.
    - Jika output akan dioperkan ke model 3D generatif, aktifkan `padToSquare: True`.
 5. **Mulai Komputasi**:

@@ -32,3 +32,4 @@ tests/out_rgba/
 tests/out_mask/
 tests/unit_test_out/
 *.log
+
